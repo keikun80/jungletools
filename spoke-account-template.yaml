@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cross-Account IAM Role Setup for Security Group Automation'
+
+Parameters:
+  HubAccountId:
+    Type: String
+    Default: '123456789012'
+    Description: 'AWS Account ID of the Hub / Operator Account'
+  RoleName:
+    Type: String
+    Default: 'SgAutomationCrossAccountRole'
+    Description: 'Name of the Cross-Account IAM Role to create'
+
+Resources:
+  CrossAccountRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${HubAccountId}:root'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: SgAutomationPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeSubnets
+                  - ec2:CreateSecurityGroup
+                  - ec2:CreateTags
+                  - ec2:DeleteSecurityGroup
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupEgress
+                Resource: '*'
+
+Outputs:
+  RoleArn:
+    Description: 'ARN of the created Cross-Account IAM Role'
+    Value: !GetAtt CrossAccountRole.Arn

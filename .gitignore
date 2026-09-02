@@ -1,0 +1,21 @@
+# Environment Configuration Files (Private / Sensitive)
+env.json
+frontend/config.js
+samconfig.toml
+
+# AWS SAM build outputs
+.aws-sam/
+
+# Node modules
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Logs
+*.log
+
+# OS / Editor Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VPC Security Group Console</title>
+  <!-- Google Fonts: Outfit for UI, JetBrains Mono for Code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <!-- CryptoJS CDN for SigV4 Hashing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="config.js"></script>
+  <script src="sigv4.js"></script>
+</head>
+<body>
+
+  <!-- App Container -->
+  <div class="app-container">
+    
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <i data-lucide="shield-alert" class="logo-icon"></i>
+          <span>SG Operator</span>
+        </div>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <button id="nav-dashboard" class="nav-item active">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard</span>
+        </button>
+        <button id="nav-logs" class="nav-item">
+          <i data-lucide="history"></i>
+          <span>Audit Logs</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="vpc-section-header">
+        <span>VPCs & Security Groups</span>
+        <button id="btn-refresh-sgs" class="btn-icon-sm" title="Refresh Security Groups">
+          <i data-lucide="refresh-cw"></i>
+        </button>
+      </div>
+
+      <!-- Sidebar Security Group Filter Search Bar -->
+      <div class="sidebar-search-box">
+        <i data-lucide="search" class="search-icon"></i>
+        <input type="text" id="sidebar-sg-search" placeholder="Search VPC or SG..." />
+        <button id="btn-clear-sg-search" class="btn-clear-search" style="display: none;" title="Clear search">&times;</button>
+      </div>
+
+      <!-- VPC Accordion List -->
+      <div id="vpc-list" class="vpc-list">
+        <div class="loading-spinner-wrapper">
+          <div class="spinner"></div>
+          <span class="loading-text">Loading VPCs...</span>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button id="btn-open-create-sg" class="btn btn-primary btn-full">
+          <i data-lucide="plus-circle"></i>
+          <span>New Security Group</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top Header Bar -->
+      <header class="top-bar">
+        <div class="breadcrumb">
+          <span id="breadcrumb-parent">Console</span>
+          <span class="separator">/</span>
+          <span id="breadcrumb-active" class="active">Overview</span>
+        </div>
+
+        <div class="api-config">
+          <div class="api-status-badge offline" id="api-status">
+            <span class="status-dot"></span>
+            <span id="api-status-text">Disconnected</span>
+          </div>
+          <div class="api-input-wrapper" style="width: 240px;">
+            <i data-lucide="link-2" class="input-icon"></i>
+            <input type="text" id="api-endpoint-input" placeholder="API Endpoint URL" />
+            <button id="btn-save-endpoint" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">Set</button>
+          </div>
+          <!-- Target Account Selector -->
+          <div class="api-input-wrapper" style="width: 190px;">
+            <i data-lucide="key-round" class="input-icon"></i>
+            <select id="target-account-select" style="width: 100%; border: none; font-size: 0.8rem; background: none; outline: none; padding: 6px 4px;">
+            </select>
+          </div>
+          <!-- Target Role Input -->
+          <div class="api-input-wrapper" style="width: 200px;">
+            <i data-lucide="user-check" class="input-icon"></i>
+            <input type="text" id="target-role-input" placeholder="Role Name" style="font-size: 0.8rem; padding: 6px 4px; border: none; outline: none; background: none;" />
+          </div>
+          <div class="user-session-info" id="session-info" style="display: none; align-items: center; gap: 12px; border-left: 1px solid var(--border-color); padding-left: 16px;">
+            <span id="session-user" class="code-text" style="font-size: 0.75rem; color: var(--accent-cyan);">IAM User</span>
+            <button id="btn-relogin" class="btn btn-warning-outline" style="display: none; padding: 6px 12px; font-size: 0.75rem;">
+              <i data-lucide="log-in" style="width: 12px; height: 12px;"></i>
+              <span>다시 로그인</span>
+            </button>
+            <button id="btn-logout" class="btn btn-danger-outline" style="padding: 6px 12px; font-size: 0.75rem;">
+              <i data-lucide="log-out" style="width: 12px; height: 12px;"></i>
+              <span>Disconnect</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- View 1: Dashboard Home / Overview -->
+      <section id="view-dashboard" class="content-view active">
+        <div class="hero-section">
+          <h1>VPC Security Group Operator</h1>
+          <p>Easily orchestrate, audit, and regulate network security policies across all AWS VPCs in real-time.</p>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-icon bg-indigo">
+              <i data-lucide="network"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Active VPCs</span>
+              <span class="metric-value" id="metric-vpcs">-</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon bg-cyan">
+              <i data-lucide="shield"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Total Security Groups</span>
+              <span class="metric-value" id="metric-sgs">-</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon bg-purple">
+              <i data-lucide="list-todo"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Inbound Rules</span>
+              <span class="metric-value" id="metric-inbound">-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-placeholder">
+          <i data-lucide="shield-check" class="placeholder-icon"></i>
+          <h3>Select a Security Group from the sidebar to manage rules.</h3>
+          <p>Or configure your API Gateway endpoint above to synchronize live VPC data from AWS.</p>
+        </div>
+      </section>
+
+      <!-- View 2: Security Group Details & Editor -->
+      <section id="view-sg-detail" class="content-view">
+        <div class="sg-detail-header-card">
+          <div class="sg-header-left">
+            <div class="sg-avatar">
+              <i data-lucide="shield"></i>
+            </div>
+            <div>
+              <h2 id="detail-sg-name">sg-name</h2>
+              <p id="detail-sg-id" class="code-text">sg-00000000000</p>
+            </div>
+          </div>
+          <div class="sg-header-actions">
+            <button id="btn-delete-sg" class="btn btn-danger-outline">
+              <i data-lucide="trash-2"></i>
+              <span>Delete Security Group</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Description & VPC Metas -->
+        <div class="meta-details-grid">
+          <div class="meta-detail-item">
+            <span class="meta-label">Description</span>
+            <span class="meta-value" id="detail-sg-desc">-</span>
+          </div>
+          <div class="meta-detail-item">
+            <span class="meta-label">VPC ID</span>
+            <span class="meta-value code-text" id="detail-sg-vpc">-</span>
+          </div>
+        </div>
+
+        <!-- Rules Tab Menu -->
+        <div class="rules-tabs">
+          <button id="tab-inbound" class="tab-btn active">Inbound Rules (<span id="count-inbound">0</span>)</button>
+          <button id="tab-outbound" class="tab-btn">Outbound Rules (<span id="count-outbound">0</span>)</button>
+        </div>
+
+        <!-- Rules Container -->
+        <div class="rules-container">
+          
+          <!-- Inbound Rules Pane -->
+          <div id="pane-inbound" class="rules-pane active">
+            <table class="rules-table">
+              <thead>
+                <tr>
+                  <th style="width: 15%;">Protocol</th>
+                  <th style="width: 15%;">Port Range</th>
+                  <th style="width: 35%;">Source (CIDR or Group)</th>
+                  <th style="width: 25%;">Description</th>
+                  <th style="width: 10%;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="table-body-inbound">
+                <!-- Inbound rules dynamic injection -->
+              </tbody>
+            </table>
+            <button id="btn-add-inbound-rule" class="btn btn-dashed">
+              <i data-lucide="plus"></i>
+              <span>Add Inbound Rule</span>
+            </button>
+          </div>
+
+          <!-- Outbound Rules Pane -->
+          <div id="pane-outbound" class="rules-pane">
+            <table class="rules-table">
+              <thead>
+                <tr>
+                  <th style="width: 15%;">Protocol</th>
+                  <th style="width: 15%;">Port Range</th>
+                  <th style="width: 35%;">Destination (CIDR or Group)</th>
+                  <th style="width: 25%;">Description</th>
+                  <th style="width: 10%;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="table-body-outbound">
+                <!-- Outbound rules dynamic injection -->
+              </tbody>
+            </table>
+            <button id="btn-add-outbound-rule" class="btn btn-dashed">
+              <i data-lucide="plus"></i>
+              <span>Add Outbound Rule</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Rules Editor Floating Action Footer -->
+        <div class="actions-sticky-bar">
+          <p class="warning-alert-text">
+            <i data-lucide="alert-triangle"></i>
+            <span>Applying changes will overwrite current security group rules in AWS.</span>
+          </p>
+          <div class="btn-group">
+            <button id="btn-cancel-rules" class="btn btn-secondary">Discard Changes</button>
+            <button id="btn-save-rules" class="btn btn-primary">
+              <i data-lucide="save"></i>
+              <span>Save & Apply Rules</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 3: Audit Logs -->
+      <section id="view-logs" class="content-view">
+        <div class="view-header">
+          <div>
+            <h2>Audit Logs</h2>
+            <p>Historical changes logged in DynamoDB for compliance auditing.</p>
+          </div>
+          <button id="btn-refresh-logs" class="btn btn-secondary">
+            <i data-lucide="rotate-cw"></i>
+            <span>Refresh Logs</span>
+          </button>
+        </div>
+
+        <div class="logs-table-wrapper">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th style="width: 25%;">Timestamp</th>
+                <th style="width: 20%;">Security Group ID</th>
+                <th style="width: 15%;">Action</th>
+                <th style="width: 15%;">Status</th>
+                <th style="width: 25%;">Details</th>
+              </tr>
+            </thead>
+            <tbody id="table-body-logs">
+              <!-- Logs dynamic injection -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal 1: Create Security Group -->
+  <div id="modal-create-sg" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3>Create New Security Group</h3>
+        <button id="btn-close-create-modal" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="create-sg-name">Security Group Name <span class="required">*</span></label>
+          <input type="text" id="create-sg-name" placeholder="e.g., web-dmz-sg" required>
+        </div>
+        <div class="form-group">
+          <label for="create-sg-desc">Description <span class="required">*</span></label>
+          <input type="text" id="create-sg-desc" placeholder="e.g., Allow HTTP and SSH inbound traffic" required>
+        </div>
+        <div class="form-group">
+          <label for="create-sg-vpc">VPC <span class="required">*</span></label>
+          <select id="create-sg-vpc">
+            <!-- Dynamic VPC list options -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="create-sg-name-tag">Friendly Name (Name Tag)</label>
+          <input type="text" id="create-sg-name-tag" placeholder="e.g., Web Server SG">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-create-sg" class="btn btn-secondary">Cancel</button>
+        <button id="btn-submit-create-sg" class="btn btn-primary">Create SG</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Log Detail JSON Viewer -->
+  <div id="modal-log-detail" class="modal-overlay">
+    <div class="modal-container modal-lg">
+      <div class="modal-header">
+        <h3>Change Details</h3>
+        <button id="btn-close-log-modal" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <pre class="json-viewer" id="log-detail-json"></pre>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-close-log-modal-ok" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IAM Credentials Auth Overlay -->
+  <div id="auth-overlay" class="modal-overlay" style="z-index: 200;">
+    <div class="modal-container" style="width: 440px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="key-round" style="color: var(--primary);"></i>
+          <span>AWS IAM Login</span>
+        </h3>
+        <span class="modal-close-btn" id="btn-close-auth-modal">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div id="auth-expired-banner" class="alert-banner alert-warning" style="display: none; margin-bottom: 16px; padding: 10px 14px; border-radius: var(--radius-md); background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); color: #d97706; font-size: 0.82rem; align-items: center; gap: 8px;">
+          <i data-lucide="alert-triangle" style="width: 16px; height: 16px; flex-shrink: 0;"></i>
+          <span>세션이 만료되었습니다. 새 자격 증명을 입력하여 다시 로그인하세요.</span>
+        </div>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.4;">
+          Please enter your AWS IAM Access Keys. All API requests are signed client-side using AWS SigV4. Your credentials are never sent to third parties.<br>
+		  aws sts get-session-token --duration-seconds 86400 --serial-number "<OTP_ARN>" --region ap-northeast-2 --profile <OWN_USERNAME> --token-code <TOKEN>
+        </p>
+        <div class="form-group">
+          <label for="auth-access-key">AWS Access Key ID <span class="required">*</span></label>
+          <input type="text" id="auth-access-key" placeholder="AKIA..." required>
+        </div>
+        <div class="form-group">
+          <label for="auth-secret-key">AWS Secret Access Key <span class="required">*</span></label>
+          <input type="password" id="auth-secret-key" placeholder="wJalrXUtn..." required>
+        </div>
+        <div class="form-group">
+          <label for="auth-session-token">AWS Session Token (Optional)</label>
+          <input type="password" id="auth-session-token" placeholder="For temporary/MFA sessions">
+        </div>
+        <div class="form-group">
+          <label for="auth-region">AWS Region <span class="required">*</span></label>
+          <select id="auth-region">
+            <option value="ap-northeast-2" selected>ap-northeast-2 (Seoul)</option>
+            <option value="us-east-1">us-east-1 (N. Virginia)</option>
+            <option value="us-west-2">us-west-2 (Oregon)</option>
+            <option value="eu-west-1">eu-west-1 (Ireland)</option>
+            <option value="ap-northeast-1">ap-northeast-1 (Tokyo)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-login-submit" class="btn btn-primary btn-full">
+          <i data-lucide="log-in"></i>
+          <span>Sign In & Verify</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Session Expired Alert Modal Overlay -->
+  <div id="modal-session-expired" class="modal-overlay" style="z-index: 210;">
+    <div class="modal-container" style="width: 440px; text-align: center; padding: 28px;">
+      <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(245, 158, 11, 0.15); color: #f59e0b; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+        <i data-lucide="shield-alert" style="width: 32px; height: 32px;"></i>
+      </div>
+      <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">세션이 만료되었습니다</h3>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5;" id="session-expired-msg">
+        보안 자격 증명(Session Token 또는 Access Key)이 만료되었거나 연동에 실패했습니다.<br>다시 로그인하여 서비스를 계속 이용해 주세요.
+      </p>
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="btn-relogin-modal" class="btn btn-warning btn-full" style="padding: 10px 20px;">
+          <i data-lucide="log-in"></i>
+          <span>다시 로그인</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="app.js"></script>
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+  </script>
+</body>
+</html>

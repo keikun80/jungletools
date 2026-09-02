@@ -1,0 +1,242 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS SAM Template for VPC Security Group Automation with Audit Logging
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: nodejs20.x
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        AUDIT_LOG_TABLE: !Ref SgAuditLogsTable
+
+Resources:
+  # DynamoDB Table for Audit Logs
+  SgAuditLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SgAuditLogs
+      AttributeDefinitions:
+        - AttributeName: sgId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sgId
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+
+  # HttpApi (API Gateway v2) with CORS Enabled
+  SgHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        EnableIamAuthorizer: true
+        DefaultAuthorizer: AWS_IAM
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Amz-Security-Token
+          - X-Amz-Content-Sha256
+          - X-Target-Role-Arn
+          - X-Target-Region
+        MaxAge: 600
+
+  # 1. Get Security Groups & VPCs Lambda Function
+  GetSecurityGroupsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: getSecurityGroups/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /security-groups
+            Method: GET
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:DescribeSecurityGroups
+                - ec2:DescribeVpcs
+                - ec2:DescribeSubnets
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/*"
+
+  # 2. Create Security Group Lambda Function
+  CreateSecurityGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: createSecurityGroup/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /security-groups
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SgAuditLogsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:CreateSecurityGroup
+                - ec2:CreateTags
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/*"
+
+  # 3. Update Security Group Rules Lambda Function
+  UpdateSecurityGroupRulesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: updateSecurityGroupRules/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /security-groups/{id}/rules
+            Method: PUT
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SgAuditLogsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:AuthorizeSecurityGroupIngress
+                - ec2:RevokeSecurityGroupIngress
+                - ec2:AuthorizeSecurityGroupEgress
+                - ec2:RevokeSecurityGroupEgress
+                - ec2:DescribeSecurityGroups
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/*"
+
+  # 4. Delete Security Group Lambda Function
+  DeleteSecurityGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: deleteSecurityGroup/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /security-groups/{id}
+            Method: DELETE
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SgAuditLogsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:DeleteSecurityGroup
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/*"
+
+  # 5. Get Audit Logs Lambda Function
+  GetAuditLogsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: getAuditLogs/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /audit-logs
+            Method: GET
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SgAuditLogsTable
+
+  # 6. S3 Bucket for Static Website Hosting
+  SgFrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  # 7. S3 Bucket Policy to allow Public Read Access
+  SgFrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SgFrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${SgFrontendBucket}/*'
+
+  # 8. IAM Role to allow cross-account API invocation from Hub Account
+  SgAutomationApiInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SgAutomationApiInvokeRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: ApiInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - execute-api:Invoke
+                Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SgHttpApi}/*"
+
+Outputs:
+  ApiEndpoint:
+    Description: HTTP API Gateway Endpoint URL
+    Value: !Sub "https://${SgHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  FrontendWebsiteUrl:
+    Description: S3 Static Website URL
+    Value: !GetAtt SgFrontendBucket.WebsiteURL
+
