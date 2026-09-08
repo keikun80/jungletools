@@ -9,15 +9,24 @@ let isSessionExpired = false;
 
 // DOM Elements
 const apiInput = document.getElementById('api-endpoint-input');
+const authApiInput = document.getElementById('auth-api-endpoint');
 const saveApiBtn = document.getElementById('btn-save-endpoint');
 const apiStatusBadge = document.getElementById('api-status');
 const apiStatusText = document.getElementById('api-status-text');
 
 const navDashboard = document.getElementById('nav-dashboard');
+const navBackups = document.getElementById('nav-backups');
 const navLogs = document.getElementById('nav-logs');
+const navSlack = document.getElementById('nav-slack');
 const viewDashboard = document.getElementById('view-dashboard');
 const viewSgDetail = document.getElementById('view-sg-detail');
 const viewLogs = document.getElementById('view-logs');
+const viewBackups = document.getElementById('view-backups');
+const viewSlack = document.getElementById('view-slack');
+
+const btnSaveSlack = document.getElementById('btn-save-slack');
+const btnTestSlack = document.getElementById('btn-test-slack');
+
 
 const vpcListContainer = document.getElementById('vpc-list');
 const btnRefreshSgs = document.getElementById('btn-refresh-sgs');
@@ -104,8 +113,14 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  if (!apiEndpoint && window.APP_CONFIG && window.APP_CONFIG.apiEndpoint) {
+    apiEndpoint = window.APP_CONFIG.apiEndpoint;
+    localStorage.setItem('sg_api_endpoint', apiEndpoint);
+  }
+
   if (apiEndpoint) {
-    apiInput.value = apiEndpoint;
+    if (apiInput) apiInput.value = apiEndpoint;
+    if (authApiInput) authApiInput.value = apiEndpoint;
   }
   
   // Load saved target account and role settings from localStorage if available
@@ -172,10 +187,29 @@ function setupEventListeners() {
 
   // Navigation Tabs
   navDashboard.addEventListener('click', () => switchView('dashboard'));
+  if (navBackups) {
+    navBackups.addEventListener('click', () => {
+      switchView('backups');
+      fetchAllBackupsData();
+    });
+  }
   navLogs.addEventListener('click', () => {
     switchView('logs');
     fetchAuditLogs();
   });
+  if (navSlack) {
+    navSlack.addEventListener('click', () => {
+      switchView('slack');
+      fetchSlackConfig();
+    });
+  }
+  if (btnSaveSlack) {
+    btnSaveSlack.addEventListener('click', saveSlackConfig);
+  }
+  if (btnTestSlack) {
+    btnTestSlack.addEventListener('click', sendTestSlackNotification);
+  }
+
 
   // Refresh SGs
   btnRefreshSgs.addEventListener('click', () => {
@@ -186,6 +220,22 @@ function setupEventListeners() {
   btnRefreshLogs.addEventListener('click', () => {
     if (validateEndpoint() && validateAuth()) fetchAuditLogs();
   });
+
+  // Refresh Backups
+  const btnRefreshBackups = document.getElementById('btn-refresh-backups');
+  if (btnRefreshBackups) {
+    btnRefreshBackups.addEventListener('click', () => {
+      if (validateEndpoint() && validateAuth()) fetchAllBackupsData();
+    });
+  }
+
+  // Backup Service Sub-Tabs
+  const tabBackupEbs = document.getElementById('tab-backup-ebs');
+  const tabBackupEfs = document.getElementById('tab-backup-efs');
+  const tabBackupRds = document.getElementById('tab-backup-rds');
+  if (tabBackupEbs) tabBackupEbs.addEventListener('click', () => switchBackupTab('ebs'));
+  if (tabBackupEfs) tabBackupEfs.addEventListener('click', () => switchBackupTab('efs'));
+  if (tabBackupRds) tabBackupRds.addEventListener('click', () => switchBackupTab('rds'));
 
   // Create SG Modal triggers
   btnOpenCreateSg.addEventListener('click', () => {
@@ -259,6 +309,14 @@ function setupEventListeners() {
 
 // Verification Helper for API Endpoint
 function validateEndpoint() {
+  if (!apiEndpoint && window.APP_CONFIG && window.APP_CONFIG.apiEndpoint) {
+    apiEndpoint = window.APP_CONFIG.apiEndpoint;
+    localStorage.setItem('sg_api_endpoint', apiEndpoint);
+  }
+  if (apiEndpoint) {
+    if (apiInput) apiInput.value = apiEndpoint;
+    if (authApiInput) authApiInput.value = apiEndpoint;
+  }
   if (!apiEndpoint) {
     showToast('AWS API Endpoint URL is required. Add it in the top bar.', 'error');
     return false;
@@ -329,6 +387,10 @@ function showLoginOverlay() {
   if (authExpiredBanner) {
     authExpiredBanner.style.display = isSessionExpired ? 'flex' : 'none';
   }
+  const currentEp = apiEndpoint || (window.APP_CONFIG && window.APP_CONFIG.apiEndpoint) || '';
+  if (authApiInput && currentEp) {
+    authApiInput.value = currentEp;
+  }
   authOverlay.classList.add('open');
 }
 
@@ -383,6 +445,13 @@ async function signedFetch(url, options = {}) {
 
 // Authenticate Credentials and Fetch Data
 async function handleLogin() {
+  const authApiInput = document.getElementById('auth-api-endpoint');
+  if (authApiInput && authApiInput.value.trim()) {
+    apiEndpoint = authApiInput.value.trim().replace(/\/$/, '');
+    localStorage.setItem('sg_api_endpoint', apiEndpoint);
+    if (apiInput) apiInput.value = apiEndpoint;
+  }
+
   const accessKeyId = document.getElementById('auth-access-key').value.replace(/\s+/g, '');
   const secretAccessKey = document.getElementById('auth-secret-key').value.replace(/\s+/g, '');
   const sessionToken = document.getElementById('auth-session-token').value.replace(/\s+/g, '');
@@ -479,11 +548,15 @@ function handleLogout() {
 // Switching View Management
 function switchView(viewName) {
   navDashboard.classList.remove('active');
+  if (navBackups) navBackups.classList.remove('active');
   navLogs.classList.remove('active');
+  if (navSlack) navSlack.classList.remove('active');
   
   viewDashboard.classList.remove('active');
   viewSgDetail.classList.remove('active');
   viewLogs.classList.remove('active');
+  if (viewBackups) viewBackups.classList.remove('active');
+  if (viewSlack) viewSlack.classList.remove('active');
 
   const parentBreadcrumb = document.getElementById('breadcrumb-parent');
   const activeBreadcrumb = document.getElementById('breadcrumb-active');
@@ -493,17 +566,28 @@ function switchView(viewName) {
     viewDashboard.classList.add('active');
     parentBreadcrumb.textContent = 'Console';
     activeBreadcrumb.textContent = 'Overview';
+  } else if (viewName === 'backups') {
+    if (navBackups) navBackups.classList.add('active');
+    if (viewBackups) viewBackups.classList.add('active');
+    parentBreadcrumb.textContent = 'Console';
+    activeBreadcrumb.textContent = 'Backup Monitor';
   } else if (viewName === 'logs') {
     navLogs.classList.add('active');
     viewLogs.classList.add('active');
     parentBreadcrumb.textContent = 'Console';
     activeBreadcrumb.textContent = 'Audit Logs';
+  } else if (viewName === 'slack') {
+    if (navSlack) navSlack.classList.add('active');
+    if (viewSlack) viewSlack.classList.add('active');
+    parentBreadcrumb.textContent = 'Console';
+    activeBreadcrumb.textContent = 'Slack Management';
   } else if (viewName === 'detail') {
     viewSgDetail.classList.add('active');
     parentBreadcrumb.textContent = 'Security Groups';
     activeBreadcrumb.textContent = selectedSg ? selectedSg.groupName : 'Details';
   }
 }
+
 
 // Switching Rules Tab Pane
 function switchRulesTab(tabType) {
@@ -603,112 +687,155 @@ function setApiStatus(status) {
   }
 }
 
-// Render dynamic VPC navigation list
-function renderSidebarVpcList(searchTerm = '') {
-  vpcListContainer.innerHTML = '';
-  
+let selectedVpcTabId = 'all';
+
+// Render dynamic Dashboard VPC tabs and Security Groups table
+function renderDashboardVpcTabsAndSgs(searchTerm = '') {
+  const vpcTabsBar = document.getElementById('vpc-tabs-bar');
+  const tableBodySgs = document.getElementById('table-body-dashboard-sgs');
   const searchInput = document.getElementById('sidebar-sg-search');
   const clearBtn = document.getElementById('btn-clear-sg-search');
+
   if (searchInput && !searchTerm) {
     searchTerm = searchInput.value;
   }
-  
   const query = (searchTerm || '').trim().toLowerCase();
 
   if (clearBtn) {
     clearBtn.style.display = query ? 'block' : 'none';
   }
-  
+
+  // 1. Render VPC Horizontal Tabs
+  if (vpcTabsBar) {
+    vpcTabsBar.innerHTML = '';
+
+    // "All VPCs" Tab
+    const allTab = document.createElement('button');
+    allTab.className = `tab-btn ${selectedVpcTabId === 'all' ? 'active' : ''}`;
+    let totalSgCount = 0;
+    vpcData.forEach(v => totalSgCount += (v.securityGroups || []).length);
+    allTab.innerHTML = `
+      <i data-lucide="layers" style="width: 15px; height: 15px; vertical-align: middle; margin-right: 4px;"></i>
+      <span>All VPCs (${totalSgCount})</span>
+    `;
+    allTab.addEventListener('click', () => {
+      selectedVpcTabId = 'all';
+      renderDashboardVpcTabsAndSgs();
+    });
+    vpcTabsBar.appendChild(allTab);
+
+    // Individual VPC Tabs
+    vpcData.forEach(vpc => {
+      const tab = document.createElement('button');
+      tab.className = `tab-btn ${selectedVpcTabId === vpc.vpcId ? 'active' : ''}`;
+      const sgCount = (vpc.securityGroups || []).length;
+      const displayVpcName = vpc.vpcName || vpc.vpcId;
+      tab.innerHTML = `
+        <i data-lucide="network" style="width: 15px; height: 15px; vertical-align: middle; margin-right: 4px;"></i>
+        <span>${displayVpcName} (${sgCount})</span>
+      `;
+      tab.title = `${vpc.vpcId} - ${vpc.cidrBlock}`;
+      tab.addEventListener('click', () => {
+        selectedVpcTabId = vpc.vpcId;
+        renderDashboardVpcTabsAndSgs();
+      });
+      vpcTabsBar.appendChild(tab);
+    });
+  }
+
+  // 2. Render Security Groups Table
+  if (!tableBodySgs) return;
+  tableBodySgs.innerHTML = '';
+
   if (vpcData.length === 0) {
-    vpcListContainer.innerHTML = `
-      <div class="dashboard-placeholder" style="padding: 20px; border-style: solid;">
-        <p style="font-size: 0.8rem;">No VPCs/SGs loaded. Enter valid AWS keys to login.</p>
-      </div>
+    tableBodySgs.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px;">
+          No VPCs or Security Groups loaded. Please configure endpoint and credentials.
+        </td>
+      </tr>
     `;
     return;
   }
 
-  let matchCount = 0;
+  // Filter VPCs by selected tab
+  const filteredVpcs = selectedVpcTabId === 'all'
+    ? vpcData
+    : vpcData.filter(v => v.vpcId === selectedVpcTabId);
 
-  vpcData.forEach(vpc => {
-    const vpcMatch = query === '' || 
-      (vpc.vpcName && vpc.vpcName.toLowerCase().includes(query)) || 
-      (vpc.vpcId && vpc.vpcId.toLowerCase().includes(query)) ||
-      (vpc.cidrBlock && vpc.cidrBlock.toLowerCase().includes(query));
-
-    const sgs = (vpc.securityGroups || []).filter(sg => {
-      if (query === '' || vpcMatch) return true;
-      return (sg.groupName && sg.groupName.toLowerCase().includes(query)) ||
-             (sg.groupId && sg.groupId.toLowerCase().includes(query)) ||
-             (sg.description && sg.description.toLowerCase().includes(query));
-    });
-
-    if (!vpcMatch && sgs.length === 0) {
-      return;
-    }
-
-    matchCount++;
-
-    const accordion = document.createElement('div');
-    accordion.className = 'vpc-accordion-item';
-    if (query !== '' || (selectedSg && selectedSg.vpcId === vpc.vpcId)) {
-      accordion.classList.add('open');
-    }
-    accordion.id = `vpc-acc-${vpc.vpcId}`;
-
-    const header = document.createElement('div');
-    header.className = 'vpc-header';
-    header.innerHTML = `
-      <div class="vpc-title-wrapper">
-        <span class="vpc-name" title="${vpc.vpcName}">${vpc.vpcName}</span>
-        <span class="vpc-id" title="${vpc.vpcId} (${vpc.cidrBlock})">${vpc.vpcId} (${vpc.cidrBlock})</span>
-      </div>
-      <i data-lucide="chevron-right" class="vpc-chevron"></i>
-    `;
-
-    const sgList = document.createElement('div');
-    sgList.className = 'vpc-sgs-list';
-
-    if (sgs.length > 0) {
-      sgs.forEach(sg => {
-        const item = document.createElement('div');
-        item.className = 'sg-item';
-        if (selectedSg && selectedSg.groupId === sg.groupId) {
-          item.classList.add('active');
-        }
-        item.id = `sg-item-${sg.groupId}`;
-        item.innerHTML = `
-          <span class="sg-item-name" title="${sg.groupName}">${sg.groupName}</span>
-          <span class="sg-item-id" title="${sg.groupId}">${sg.groupId}</span>
-        `;
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectSecurityGroup(sg.groupId);
-        });
-        sgList.appendChild(item);
+  let sgListToDisplay = [];
+  filteredVpcs.forEach(vpc => {
+    (vpc.securityGroups || []).forEach(sg => {
+      sgListToDisplay.push({
+        ...sg,
+        vpcId: vpc.vpcId,
+        vpcName: vpc.vpcName,
+        cidrBlock: vpc.cidrBlock
       });
-    } else {
-      sgList.innerHTML = `<span class="loading-text" style="padding: 4px 8px;">No matching security groups.</span>`;
-    }
-
-    header.addEventListener('click', () => {
-      accordion.classList.toggle('open');
     });
-
-    accordion.appendChild(header);
-    accordion.appendChild(sgList);
-    vpcListContainer.appendChild(accordion);
   });
 
-  if (matchCount === 0) {
-    vpcListContainer.innerHTML = `
-      <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.8rem;">
-        No security groups found matching "${query}".
-      </div>
-    `;
+  // Filter by search query
+  if (query) {
+    sgListToDisplay = sgListToDisplay.filter(sg => 
+      (sg.groupName && sg.groupName.toLowerCase().includes(query)) ||
+      (sg.groupId && sg.groupId.toLowerCase().includes(query)) ||
+      (sg.description && sg.description.toLowerCase().includes(query)) ||
+      (sg.vpcId && sg.vpcId.toLowerCase().includes(query)) ||
+      (sg.vpcName && sg.vpcName.toLowerCase().includes(query))
+    );
   }
 
-  lucide.createIcons();
+  if (sgListToDisplay.length === 0) {
+    tableBodySgs.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px;">
+          No Security Groups found in ${selectedVpcTabId === 'all' ? 'any VPC' : selectedVpcTabId} matching "${query}".
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  sgListToDisplay.forEach(sg => {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    const inboundCount = (sg.ipPermissions || []).length;
+    const outboundCount = (sg.ipPermissionsEgress || []).length;
+
+    tr.innerHTML = `
+      <td><strong>${sg.groupName}</strong></td>
+      <td class="code-text" style="font-size: 0.8rem; background:none; border:none; color: var(--accent-cyan);">${sg.groupId}</td>
+      <td style="font-size: 0.82rem;"><span class="code-text" style="font-size:0.75rem;">${sg.vpcId}</span> <span style="color:var(--text-muted);">(${sg.vpcName || 'VPC'})</span></td>
+      <td style="font-size: 0.82rem; color: var(--text-muted);">${sg.description || '-'}</td>
+      <td>
+        <span class="badge badge-update" style="font-size:0.7rem; margin-right:4px;">In: ${inboundCount}</span>
+        <span class="badge badge-update" style="font-size:0.7rem;">Out: ${outboundCount}</span>
+      </td>
+      <td>
+        <button class="btn btn-secondary btn-manage-rules" style="padding: 4px 10px; font-size: 0.75rem;">
+          <i data-lucide="sliders" style="width:12px; height:12px;"></i> Manage
+        </button>
+      </td>
+    `;
+
+    tr.querySelector('.btn-manage-rules').addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectSecurityGroup(sg.groupId);
+    });
+
+    tr.addEventListener('click', () => {
+      selectSecurityGroup(sg.groupId);
+    });
+
+    tableBodySgs.appendChild(tr);
+  });
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderSidebarVpcList(searchTerm = '') {
+  return renderDashboardVpcTabsAndSgs(searchTerm);
 }
 
 // Update dashboard global KPI metrics
@@ -1203,3 +1330,396 @@ function renderAuditLogsTable(logs) {
     tableBodyLogs.appendChild(tr);
   });
 }
+
+// Backup Monitor Tab Switcher
+function switchBackupTab(tabName) {
+  const tabEbs = document.getElementById('tab-backup-ebs');
+  const tabEfs = document.getElementById('tab-backup-efs');
+  const tabRds = document.getElementById('tab-backup-rds');
+  const paneEbs = document.getElementById('pane-backup-ebs');
+  const paneEfs = document.getElementById('pane-backup-efs');
+  const paneRds = document.getElementById('pane-backup-rds');
+
+  [tabEbs, tabEfs, tabRds].forEach(t => t && t.classList.remove('active'));
+  [paneEbs, paneEfs, paneRds].forEach(p => p && p.classList.remove('active'));
+
+  if (tabName === 'ebs' && tabEbs && paneEbs) {
+    tabEbs.classList.add('active');
+    paneEbs.classList.add('active');
+  } else if (tabName === 'efs' && tabEfs && paneEfs) {
+    tabEfs.classList.add('active');
+    paneEfs.classList.add('active');
+  } else if (tabName === 'rds' && tabRds && paneRds) {
+    tabRds.classList.add('active');
+    paneRds.classList.add('active');
+  }
+}
+
+// Fetch All Backups (EBS, EFS, RDS) Data
+async function fetchAllBackupsData() {
+  if (!validateEndpoint() || !credentials) {
+    showLoginOverlay();
+    return;
+  }
+
+  const metricTotal = document.getElementById('backup-metric-total');
+  const metricHealthy = document.getElementById('backup-metric-healthy');
+  const metricFailure = document.getElementById('backup-metric-failure');
+  const metricUnprotected = document.getElementById('backup-metric-unprotected');
+
+  const tableBodyEbs = document.getElementById('table-body-ebs-backups');
+  const tableBodyEfs = document.getElementById('table-body-efs-backups');
+  const tableBodyRds = document.getElementById('table-body-rds-backups');
+
+  if (tableBodyEbs) tableBodyEbs.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 24px;"><div class="spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div> Scanning EBS Volumes & Snapshots...</td></tr>`;
+  if (tableBodyEfs) tableBodyEfs.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px;"><div class="spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div> Scanning EFS File Systems...</td></tr>`;
+  if (tableBodyRds) tableBodyRds.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 24px;"><div class="spinner" style="display:inline-block; vertical-align:middle; margin-right:8px;"></div> Scanning RDS Databases & Snapshots...</td></tr>`;
+
+  let totalResources = 0;
+  let totalHealthy = 0;
+  let totalFailure = 0;
+  let totalUnprotected = 0;
+
+  // 1. Fetch EBS
+  try {
+    const ebsRes = await signedFetch(`${apiEndpoint}/backups/ebs`);
+    if (ebsRes.ok) {
+      const ebsData = await ebsRes.json();
+      if (ebsData.error) {
+        if (tableBodyEbs) tableBodyEbs.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--accent-orange); padding: 24px;"><i data-lucide="alert-circle" style="vertical-align:middle; margin-right:4px;"></i> ${ebsData.error}</td></tr>`;
+      } else {
+        renderEbsBackupsTable(ebsData.volumes || []);
+        if (ebsData.summary) {
+          totalResources += ebsData.summary.totalVolumes || 0;
+          totalHealthy += ebsData.summary.healthy || 0;
+          totalFailure += ebsData.summary.failure || 0;
+          totalUnprotected += ebsData.summary.unprotected || 0;
+        }
+      }
+    } else {
+      if (tableBodyEbs) tableBodyEbs.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--danger); padding: 24px;">Failed to load EBS backups (HTTP ${ebsRes.status})</td></tr>`;
+    }
+  } catch (err) {
+    console.error("EBS fetch error:", err);
+    if (tableBodyEbs) tableBodyEbs.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--danger); padding: 24px;">Error: ${err.message}</td></tr>`;
+  }
+
+  // 2. Fetch EFS
+  try {
+    const efsRes = await signedFetch(`${apiEndpoint}/backups/efs`);
+    if (efsRes.ok) {
+      const efsData = await efsRes.json();
+      if (efsData.error) {
+        if (tableBodyEfs) tableBodyEfs.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--accent-orange); padding: 24px;"><i data-lucide="alert-circle" style="vertical-align:middle; margin-right:4px;"></i> ${efsData.error}</td></tr>`;
+      } else {
+        renderEfsBackupsTable(efsData.fileSystems || []);
+        if (efsData.summary) {
+          totalResources += efsData.summary.totalFileSystems || 0;
+          totalHealthy += efsData.summary.healthy || 0;
+          totalFailure += efsData.summary.failure || 0;
+          totalUnprotected += efsData.summary.unprotected || 0;
+        }
+      }
+    } else {
+      if (tableBodyEfs) tableBodyEfs.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--danger); padding: 24px;">Failed to load EFS backups (HTTP ${efsRes.status})</td></tr>`;
+    }
+  } catch (err) {
+    console.error("EFS fetch error:", err);
+    if (tableBodyEfs) tableBodyEfs.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--danger); padding: 24px;">Error: ${err.message}</td></tr>`;
+  }
+
+  // 3. Fetch RDS
+  try {
+    const rdsRes = await signedFetch(`${apiEndpoint}/backups/rds`);
+    if (rdsRes.ok) {
+      const rdsData = await rdsRes.json();
+      if (rdsData.error) {
+        if (tableBodyRds) tableBodyRds.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--accent-orange); padding: 24px;"><i data-lucide="alert-circle" style="vertical-align:middle; margin-right:4px;"></i> ${rdsData.error}</td></tr>`;
+      } else {
+        renderRdsBackupsTable(rdsData.instances || []);
+        if (rdsData.summary) {
+          totalResources += rdsData.summary.totalInstances || 0;
+          totalHealthy += rdsData.summary.healthy || 0;
+          totalFailure += rdsData.summary.failure || 0;
+          totalUnprotected += rdsData.summary.unprotected || 0;
+        }
+      }
+    } else {
+      if (tableBodyRds) tableBodyRds.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--danger); padding: 24px;">Failed to load RDS backups (HTTP ${rdsRes.status})</td></tr>`;
+    }
+  } catch (err) {
+    console.error("RDS fetch error:", err);
+    if (tableBodyRds) tableBodyRds.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--danger); padding: 24px;">Error: ${err.message}</td></tr>`;
+  }
+
+  if (metricTotal) metricTotal.textContent = totalResources;
+  if (metricHealthy) metricHealthy.textContent = totalHealthy;
+  if (metricFailure) metricFailure.textContent = totalFailure;
+  if (metricUnprotected) metricUnprotected.textContent = totalUnprotected;
+
+  if (window.lucide) lucide.createIcons();
+}
+
+// Render EBS Backups Table
+function renderEbsBackupsTable(volumes) {
+  const tableBodyEbs = document.getElementById('table-body-ebs-backups');
+  if (!tableBodyEbs) return;
+  tableBodyEbs.innerHTML = '';
+
+  if (volumes.length === 0) {
+    tableBodyEbs.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+          No EBS volumes found in current region/account.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  volumes.forEach(vol => {
+    const tr = document.createElement('tr');
+    let badgeClass = 'badge-unprotected';
+    if (vol.status === 'Healthy') badgeClass = 'badge-healthy';
+    else if (vol.status === 'Failure') badgeClass = 'badge-failure';
+    else if (vol.status === 'Warning') badgeClass = 'badge-warning';
+
+    const snapTimeText = vol.latestSnapshotTime ? new Date(vol.latestSnapshotTime).toLocaleString() : 'No Snapshot';
+    const snapIdText = vol.latestSnapshotId ? `<span class="code-text" style="font-size:0.8rem; color:var(--accent-cyan);">${vol.latestSnapshotId}</span>` : 'N/A';
+
+    tr.innerHTML = `
+      <td class="code-text" style="font-size: 0.8rem; background:none; border:none; color:var(--accent-cyan);">${vol.volumeId}</td>
+      <td><strong>${vol.volumeName}</strong></td>
+      <td>${vol.size} GiB <span style="font-size:0.75rem; color:var(--text-muted);">(${vol.volumeType})</span></td>
+      <td>${snapIdText}</td>
+      <td style="font-size: 0.82rem;">${snapTimeText}</td>
+      <td><span class="badge ${badgeClass}">${vol.status}</span></td>
+    `;
+    tableBodyEbs.appendChild(tr);
+  });
+}
+
+
+
+// Render EFS Backups Table
+function renderEfsBackupsTable(fileSystems) {
+  const tableBodyEfs = document.getElementById('table-body-efs-backups');
+  if (!tableBodyEfs) return;
+  tableBodyEfs.innerHTML = '';
+
+  if (fileSystems.length === 0) {
+    tableBodyEfs.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+          No EFS file systems found in current region/account.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  fileSystems.forEach(fs => {
+    const tr = document.createElement('tr');
+    let badgeClass = 'badge-unprotected';
+    if (fs.status === 'Healthy') badgeClass = 'badge-healthy';
+    else if (fs.status === 'Failure') badgeClass = 'badge-failure';
+    else if (fs.status === 'Warning') badgeClass = 'badge-warning';
+
+    const policyBadge = fs.backupPolicyStatus === 'ENABLED' 
+      ? '<span class="badge badge-healthy">ENABLED</span>' 
+      : '<span class="badge badge-unprotected">DISABLED</span>';
+
+    const sizeMb = fs.sizeInBytes ? (fs.sizeInBytes / (1024 * 1024)).toFixed(2) : '0';
+
+    tr.innerHTML = `
+      <td class="code-text" style="font-size: 0.8rem; background:none; border:none; color:var(--accent-cyan);">${fs.fileSystemId}</td>
+      <td><strong>${fs.name}</strong></td>
+      <td><span class="badge badge-update">${fs.lifeCycleState}</span></td>
+      <td>${sizeMb} MB</td>
+      <td>${policyBadge}</td>
+      <td><span class="badge ${badgeClass}">${fs.status}</span></td>
+    `;
+    tableBodyEfs.appendChild(tr);
+  });
+}
+
+// Render RDS Backups Table
+function renderRdsBackupsTable(instances) {
+  const tableBodyRds = document.getElementById('table-body-rds-backups');
+  if (!tableBodyRds) return;
+  tableBodyRds.innerHTML = '';
+
+  if (instances.length === 0) {
+    tableBodyRds.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
+          No RDS DB instances found in current region/account.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  instances.forEach(inst => {
+    const tr = document.createElement('tr');
+    let badgeClass = 'badge-unprotected';
+    if (inst.healthStatus === 'Healthy') badgeClass = 'badge-healthy';
+    else if (inst.healthStatus === 'Failure') badgeClass = 'badge-failure';
+    else if (inst.healthStatus === 'Warning') badgeClass = 'badge-warning';
+
+    const restorableText = inst.latestRestorableTime ? new Date(inst.latestRestorableTime).toLocaleString() : 'N/A';
+    const snapTimeSub = inst.latestSnapshotTime ? `<br><span style="font-size:0.72rem; color:var(--text-muted);">${new Date(inst.latestSnapshotTime).toLocaleString()}</span>` : '';
+    const snapIdText = inst.latestSnapshotId ? `<span class="code-text" style="font-size:0.75rem; color:var(--accent-cyan);">${inst.latestSnapshotId}</span>${snapTimeSub}` : 'N/A';
+
+    tr.innerHTML = `
+      <td class="code-text" style="font-size: 0.8rem; background:none; border:none; color:var(--accent-cyan);">${inst.dbInstanceIdentifier}</td>
+      <td>${inst.engine} <span style="font-size:0.75rem; color:var(--text-muted);">${inst.engineVersion || ''}</span></td>
+      <td>${inst.dbInstanceClass}</td>
+      <td><strong>${inst.backupRetentionPeriod} days</strong></td>
+      <td style="font-size: 0.82rem;">${restorableText}</td>
+      <td>${snapIdText}</td>
+      <td><span class="badge ${badgeClass}">${inst.healthStatus}</span></td>
+    `;
+    tableBodyRds.appendChild(tr);
+  });
+}
+
+// Fetch Slack Configuration from Backend
+async function fetchSlackConfig() {
+  if (!validateEndpoint()) return;
+  try {
+    const res = await signedFetch(`${apiEndpoint}/slack/config`, { method: 'GET' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || 'Slack 설정을 불러오지 못했습니다.');
+    }
+
+    const config = data.config || {};
+    const channelEmailInput = document.getElementById('slack-channel-email');
+    const senderEmailInput = document.getElementById('slack-sender-email');
+    const scheduleCronSelect = document.getElementById('slack-schedule-cron');
+    const enabledToggle = document.getElementById('slack-enabled-toggle');
+    const lastSentLabel = document.getElementById('slack-last-sent-time');
+
+    if (channelEmailInput) channelEmailInput.value = config.channelEmail || '';
+    if (senderEmailInput) senderEmailInput.value = config.senderEmail || '';
+    if (scheduleCronSelect) scheduleCronSelect.value = config.scheduleCron || 'cron(0 0 * * ? *)';
+    if (enabledToggle) enabledToggle.checked = config.enabled === true;
+    if (lastSentLabel) {
+      if (config.lastSentTimestamp) {
+        const d = new Date(config.lastSentTimestamp);
+        lastSentLabel.textContent = `최근 전송: ${d.toLocaleString('ko-KR')}`;
+      } else {
+        lastSentLabel.textContent = '최근 전송: 없음';
+      }
+    }
+  } catch (error) {
+    console.error('Failed to fetch Slack config:', error);
+    showToast(`Slack 설정 로드 실패: ${error.message}`, 'danger');
+  }
+}
+
+// Save Slack Configuration
+async function saveSlackConfig() {
+  if (!validateEndpoint() || !validateAuth()) return;
+
+  const channelEmailInput = document.getElementById('slack-channel-email');
+  const senderEmailInput = document.getElementById('slack-sender-email');
+  const scheduleCronSelect = document.getElementById('slack-schedule-cron');
+  const enabledToggle = document.getElementById('slack-enabled-toggle');
+  const btnSaveSlack = document.getElementById('btn-save-slack');
+
+  const channelEmail = channelEmailInput ? channelEmailInput.value.trim() : '';
+  const senderEmail = senderEmailInput ? senderEmailInput.value.trim() : '';
+  const scheduleCron = scheduleCronSelect ? scheduleCronSelect.value : 'cron(0 0 * * ? *)';
+  const enabled = enabledToggle ? enabledToggle.checked : false;
+
+  if (!channelEmail) {
+    showToast('Slack 채널 이메일 주소를 입력해주세요.', 'warning');
+    return;
+  }
+
+  try {
+    if (btnSaveSlack) {
+      btnSaveSlack.disabled = true;
+      btnSaveSlack.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>저장 중...</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+
+    const res = await signedFetch(`${apiEndpoint}/slack/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelEmail, senderEmail, scheduleCron, enabled })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Slack 설정 저장에 실패했습니다.');
+    }
+
+    showToast('Slack 채널 이메일 설정이 성공적으로 저장되었습니다.', 'success');
+  } catch (error) {
+    console.error('Failed to save Slack config:', error);
+    showToast(`Slack 설정 저장 실패: ${error.message}`, 'danger');
+  } finally {
+    if (btnSaveSlack) {
+      btnSaveSlack.disabled = false;
+      btnSaveSlack.innerHTML = `<i data-lucide="save"></i> <span>설정 저장</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+
+// Send Test Slack Notification
+async function sendTestSlackNotification() {
+  if (!validateEndpoint() || !validateAuth()) return;
+
+  const channelEmailInput = document.getElementById('slack-channel-email');
+  const senderEmailInput = document.getElementById('slack-sender-email');
+  const btnTestSlack = document.getElementById('btn-test-slack');
+  const channelEmail = channelEmailInput ? channelEmailInput.value.trim() : '';
+  const senderEmail = senderEmailInput ? senderEmailInput.value.trim() : '';
+
+  if (!channelEmail) {
+    showToast('Slack 채널 이메일 주소를 입력한 후 테스트를 진행해주세요.', 'warning');
+    return;
+  }
+
+  try {
+    if (btnTestSlack) {
+      btnTestSlack.disabled = true;
+      btnTestSlack.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>전송 중...</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+
+    const res = await signedFetch(`${apiEndpoint}/slack/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelEmail, senderEmail, isTest: true, scanAll: true })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || '테스트 이메일 전송에 실패했습니다.');
+    }
+
+    showToast(`슬랙 채널 이메일 전송 성공! (Failure: ${data.totalFailure || 0}건)`, 'success');
+    
+    const lastSentLabel = document.getElementById('slack-last-sent-time');
+    if (lastSentLabel && data.timestamp) {
+      const d = new Date(data.timestamp);
+      lastSentLabel.textContent = `최근 전송: ${d.toLocaleString('ko-KR')}`;
+    }
+  } catch (error) {
+    console.error('Failed to send test Slack notification:', error);
+    showToast(`테스트 이메일 전송 실패: ${error.message}`, 'danger');
+  } finally {
+    if (btnTestSlack) {
+      btnTestSlack.disabled = false;
+      btnTestSlack.innerHTML = `<i data-lucide="send"></i> <span>테스트 이메일 전송</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+

@@ -25,14 +25,14 @@ echo "=========================================================="
 
 aws cloudformation deploy \
     --template-file spoke-account-template.yaml \
-    --stack-name sg-automation-spoke-role \
+    --stack-name jungle-tools-spoke-role \
     --parameter-overrides HubAccountId="$HUB_ACCOUNT_ID" \
     --capabilities CAPABILITY_NAMED_IAM \
     --profile "$PROFILE" \
     --region "$REGION"
 
 if [ $? -eq 0 ]; then
-    echo "Successfully created/updated SgAutomationCrossAccountRole in profile '$PROFILE'!"
+    echo "Successfully created/updated JungleToolsCrossAccountRole in profile '$PROFILE'!"
 else
     echo "Failed to deploy IAM Role to profile '$PROFILE'."
 fi

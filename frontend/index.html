@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VPC Security Group Console</title>
+  <title>Jungle Tools Console</title>
   <!-- Google Fonts: Outfit for UI, JetBrains Mono for Code -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,51 +26,41 @@
       <div class="sidebar-header">
         <div class="logo">
           <i data-lucide="shield-alert" class="logo-icon"></i>
-          <span>SG Operator</span>
+          <span>Jungle Tools</span>
         </div>
       </div>
       
       <nav class="sidebar-nav">
-        <button id="nav-dashboard" class="nav-item active">
-          <i data-lucide="layout-dashboard"></i>
-          <span>Dashboard</span>
+        <!-- SG Operator Group -->
+        <div class="nav-group">
+          <div class="nav-group-header">
+            <i data-lucide="shield" class="nav-group-icon"></i>
+            <span>SG Operator</span>
+          </div>
+          <div class="nav-group-items">
+            <button id="nav-dashboard" class="nav-item sub-item active">
+              <i data-lucide="layout-dashboard"></i>
+              <span>Dashboard</span>
+            </button>
+            <button id="nav-logs" class="nav-item sub-item">
+              <i data-lucide="history"></i>
+              <span>Audit Logs</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-divider" style="margin: 10px 0;"></div>
+
+        <!-- Backup Monitor Item -->
+        <button id="nav-backups" class="nav-item">
+          <i data-lucide="hard-drive"></i>
+          <span>Backup Monitor</span>
         </button>
-        <button id="nav-logs" class="nav-item">
-          <i data-lucide="history"></i>
-          <span>Audit Logs</span>
+        <button id="nav-slack" class="nav-item">
+          <i data-lucide="bell"></i>
+          <span>슬랙 관리</span>
         </button>
       </nav>
-
-      <div class="sidebar-divider"></div>
-
-      <div class="vpc-section-header">
-        <span>VPCs & Security Groups</span>
-        <button id="btn-refresh-sgs" class="btn-icon-sm" title="Refresh Security Groups">
-          <i data-lucide="refresh-cw"></i>
-        </button>
-      </div>
-
-      <!-- Sidebar Security Group Filter Search Bar -->
-      <div class="sidebar-search-box">
-        <i data-lucide="search" class="search-icon"></i>
-        <input type="text" id="sidebar-sg-search" placeholder="Search VPC or SG..." />
-        <button id="btn-clear-sg-search" class="btn-clear-search" style="display: none;" title="Clear search">&times;</button>
-      </div>
-
-      <!-- VPC Accordion List -->
-      <div id="vpc-list" class="vpc-list">
-        <div class="loading-spinner-wrapper">
-          <div class="spinner"></div>
-          <span class="loading-text">Loading VPCs...</span>
-        </div>
-      </div>
-
-      <div class="sidebar-footer">
-        <button id="btn-open-create-sg" class="btn btn-primary btn-full">
-          <i data-lucide="plus-circle"></i>
-          <span>New Security Group</span>
-        </button>
-      </div>
     </aside>
 
     <!-- Main Content Area -->
@@ -119,11 +109,23 @@
         </div>
       </header>
 
-      <!-- View 1: Dashboard Home / Overview -->
+      <!-- View 1: Dashboard Home / Overview (VPCs & Security Groups) -->
       <section id="view-dashboard" class="content-view active">
-        <div class="hero-section">
-          <h1>VPC Security Group Operator</h1>
-          <p>Easily orchestrate, audit, and regulate network security policies across all AWS VPCs in real-time.</p>
+        <div class="view-header" style="margin-bottom: 20px;">
+          <div>
+            <h2>VPCs & Security Groups Operator</h2>
+            <p>Select a VPC tab below to view and manage security groups and inbound/outbound firewall rules.</p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button id="btn-refresh-sgs" class="btn btn-secondary">
+              <i data-lucide="rotate-cw"></i>
+              <span>Refresh VPCs</span>
+            </button>
+            <button id="btn-open-create-sg" class="btn btn-primary">
+              <i data-lucide="plus-circle"></i>
+              <span>New Security Group</span>
+            </button>
+          </div>
         </div>
 
         <!-- Metric Cards -->
@@ -157,10 +159,41 @@
           </div>
         </div>
 
-        <div class="dashboard-placeholder">
-          <i data-lucide="shield-check" class="placeholder-icon"></i>
-          <h3>Select a Security Group from the sidebar to manage rules.</h3>
-          <p>Or configure your API Gateway endpoint above to synchronize live VPC data from AWS.</p>
+        <!-- VPC Tabs & Search Bar Header -->
+        <div class="vpc-dashboard-controls" style="margin-top: 24px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+          <!-- Horizontal VPC Tabs Bar -->
+          <div id="vpc-tabs-bar" class="rules-tabs" style="margin-bottom: 0; flex: 1; overflow-x: auto; flex-wrap: nowrap;">
+            <button class="tab-btn active" data-vpc-id="all">
+              <i data-lucide="layers" style="width: 15px; height: 15px; vertical-align: middle; margin-right: 4px;"></i>
+              <span>All VPCs</span>
+            </button>
+          </div>
+
+          <!-- SG Search Input -->
+          <div class="sidebar-search-box" style="margin: 0; width: 260px;">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" id="sidebar-sg-search" placeholder="Search Security Group or ID..." />
+            <button id="btn-clear-sg-search" class="btn-clear-search" style="display: none;" title="Clear search">&times;</button>
+          </div>
+        </div>
+
+        <!-- Security Groups Table Pane -->
+        <div class="logs-table-wrapper">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th style="width: 22%;">Security Group Name</th>
+                <th style="width: 18%;">Group ID</th>
+                <th style="width: 18%;">VPC ID / Name</th>
+                <th style="width: 24%;">Description</th>
+                <th style="width: 8%;">Rules</th>
+                <th style="width: 10%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="table-body-dashboard-sgs">
+              <!-- Dynamic Security Groups Table Rows -->
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -298,6 +331,212 @@
         </div>
       </section>
 
+      <!-- View 4: Backup Status Monitor -->
+      <section id="view-backups" class="content-view">
+        <div class="view-header">
+          <div>
+            <h2>AWS Backup Status Monitor</h2>
+            <p>Real-time backup and snapshot health tracking for EC2 EBS, AWS EFS, and RDS Databases.</p>
+          </div>
+          <button id="btn-refresh-backups" class="btn btn-secondary">
+            <i data-lucide="rotate-cw"></i>
+            <span>Refresh Backups</span>
+          </button>
+        </div>
+
+        <!-- Backup Summary Overview Cards -->
+        <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+          <div class="metric-card">
+            <div class="metric-icon bg-indigo">
+              <i data-lucide="layers"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Total Resources</span>
+              <span class="metric-value" id="backup-metric-total">-</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon bg-green">
+              <i data-lucide="check-circle-2"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Healthy (&lt;=7d)</span>
+              <span class="metric-value" id="backup-metric-healthy" style="color: var(--success);">-</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon bg-danger">
+              <i data-lucide="x-circle"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Failure (Error / &gt;=8d)</span>
+              <span class="metric-value" id="backup-metric-failure" style="color: var(--danger);">-</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon bg-warning">
+              <i data-lucide="shield-off"></i>
+            </div>
+            <div class="metric-info">
+              <span class="metric-label">Unprotected</span>
+              <span class="metric-value" id="backup-metric-unprotected" style="color: #f59e0b;">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Backup Service Tabs -->
+        <div class="rules-tabs" style="margin-bottom: 20px;">
+          <button id="tab-backup-ebs" class="tab-btn active">
+            <i data-lucide="hard-drive" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px;"></i>
+            <span>EBS Snapshots</span>
+          </button>
+          <button id="tab-backup-efs" class="tab-btn">
+            <i data-lucide="folder-git-2" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px;"></i>
+            <span>EFS Backups</span>
+          </button>
+          <button id="tab-backup-rds" class="tab-btn">
+            <i data-lucide="database" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px;"></i>
+            <span>RDS Backups</span>
+          </button>
+        </div>
+
+        <!-- EBS Tab Content -->
+        <div id="pane-backup-ebs" class="rules-pane active">
+          <div class="logs-table-wrapper">
+            <table class="logs-table">
+              <thead>
+                <tr>
+                  <th style="width: 18%;">Volume ID</th>
+                  <th style="width: 20%;">Volume Name</th>
+                  <th style="width: 12%;">Size / Type</th>
+                  <th style="width: 22%;">Latest Snapshot</th>
+                  <th style="width: 16%;">Snapshot Time</th>
+                  <th style="width: 12%;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="table-body-ebs-backups">
+                <!-- EBS Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- EFS Tab Content -->
+        <div id="pane-backup-efs" class="rules-pane">
+          <div class="logs-table-wrapper">
+            <table class="logs-table">
+              <thead>
+                <tr>
+                  <th style="width: 20%;">File System ID</th>
+                  <th style="width: 20%;">Name</th>
+                  <th style="width: 15%;">State</th>
+                  <th style="width: 15%;">Size</th>
+                  <th style="width: 15%;">AWS Backup Policy</th>
+                  <th style="width: 15%;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="table-body-efs-backups">
+                <!-- EFS Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- RDS Tab Content -->
+        <div id="pane-backup-rds" class="rules-pane">
+          <div class="logs-table-wrapper">
+            <table class="logs-table">
+              <thead>
+                <tr>
+                  <th style="width: 18%;">DB Instance ID</th>
+                  <th style="width: 12%;">Engine</th>
+                  <th style="width: 12%;">Class</th>
+                  <th style="width: 12%;">Backup Retention</th>
+                  <th style="width: 18%;">Latest Restorable Time</th>
+                  <th style="width: 18%;">Latest Snapshot</th>
+                  <th style="width: 10%;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="table-body-rds-backups">
+                <!-- RDS Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 5: Slack Notification Management -->
+      <section id="view-slack" class="content-view">
+        <div class="view-header" style="margin-bottom: 20px;">
+          <div>
+            <h2>Slack Channel Email Management</h2>
+            <p>슬랙 채널 이메일 주소 등록, 스냅샷 상태 자동 모니터링 Schedule(EventBridge) 설정 및 리포트 테스트 전송</p>
+          </div>
+        </div>
+
+        <div class="slack-config-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; max-width: 720px; box-shadow: var(--shadow-sm);">
+          
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="slack-channel-email" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              Slack 채널 이메일 주소 (Channel Email) <span class="required" style="color: var(--danger);">*</span>
+            </label>
+            <input type="text" id="slack-channel-email" placeholder="channel-1@workspace.slack.com, channel-2@workspace.slack.com" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
+              슬랙 채널 설정 &gt; 통합(Integrations) &gt; '이 채널로 이메일 보내기'에서 발급받은 이메일 주소를 입력하세요. (2개 이상 시 콤마(,)로 구분)
+            </p>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="slack-sender-email" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              발신자 이메일 주소 (Sender Email / SES Identity)
+            </label>
+            <input type="email" id="slack-sender-email" placeholder="미입력 시 채널 이메일 주소 사용" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
+              AWS SES에 검증(Verified Identity)된 발신 이메일 주소를 입력하세요.
+            </p>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="slack-schedule-cron" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              EventBridge 자동 실행 일정 (KST 기준)
+            </label>
+            <select id="slack-schedule-cron" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-size: 0.85rem;">
+              <option value="cron(0 0 * * ? *)">매일 오전 09:00 KST (cron(0 0 * * ? *))</option>
+              <option value="cron(0 3 * * ? *)">매일 12:00 KST (cron(0 3 * * ? *))</option>
+              <option value="cron(0 9 * * ? *)">매일 18:00 KST (cron(0 9 * * ? *))</option>
+              <option value="cron(0 0 ? * MON *)">매주 월요일 09:00 KST (cron(0 0 ? * MON *))</option>
+            </select>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
+              스냅샷 상태 모니터링 람다가 자동으로 실행되어 슬랙 이메일로 리포트를 전송하는 시간입니다.
+            </p>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem;">자동 모니터링 알림 활성화</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">스케줄링된 알림 및 실패 항목 탐지 시 슬랙 채널 이메일로 리포트를 전송합니다.</div>
+            </div>
+            <label class="switch-toggle" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+              <input type="checkbox" id="slack-enabled-toggle" style="opacity: 0; width: 0; height: 0;">
+              <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .3s; border-radius: 24px;"></span>
+            </label>
+          </div>
+
+          <div style="display: flex; gap: 12px; justify-content: flex-end; align-items: center; border-top: 1px solid var(--border-color); padding-top: 20px;">
+            <span id="slack-last-sent-time" style="font-size: 0.78rem; color: var(--text-muted); margin-right: auto;">최근 전송: 없음</span>
+            <button id="btn-test-slack" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="send" style="width: 14px; height: 14px;"></i>
+              <span>테스트 이메일 전송</span>
+            </button>
+            <button id="btn-save-slack" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="save" style="width: 14px; height: 14px;"></i>
+              <span>설정 저장</span>
+            </button>
+          </div>
+
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -370,6 +609,10 @@
           Please enter your AWS IAM Access Keys. All API requests are signed client-side using AWS SigV4. Your credentials are never sent to third parties.<br>
 		  aws sts get-session-token --duration-seconds 86400 --serial-number "<OTP_ARN>" --region ap-northeast-2 --profile <OWN_USERNAME> --token-code <TOKEN>
         </p>
+        <div class="form-group">
+          <label for="auth-api-endpoint">AWS API Endpoint URL <span class="required">*</span></label>
+          <input type="text" id="auth-api-endpoint" placeholder="https://xxx.execute-api.ap-northeast-2.amazonaws.com" required>
+        </div>
         <div class="form-group">
           <label for="auth-access-key">AWS Access Key ID <span class="required">*</span></label>
           <input type="text" id="auth-access-key" placeholder="AKIA..." required>

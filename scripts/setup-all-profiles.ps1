@@ -40,7 +40,7 @@ foreach ($item in $profiles) {
     
     cmd /c aws cloudformation deploy `
         --template-file spoke-account-template.yaml `
-        --stack-name sg-automation-spoke-role `
+        --stack-name jungle-tools-spoke-role `
         --parameter-overrides HubAccountId=$hubId `
         --capabilities CAPABILITY_NAMED_IAM `
         --profile $prof `

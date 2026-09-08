@@ -20,7 +20,7 @@ if (Test-Path $envFile) {
 }
 
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "SG Automation Full Deployment" -ForegroundColor Cyan
+Write-Host "Jungle Tools Console Deployment" -ForegroundColor Cyan
 Write-Host "Profile: $Profile" -ForegroundColor Cyan
 Write-Host "Region: $Region" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -54,14 +54,31 @@ if ($LASTEXITCODE -ne 0) {
 
 # Step 3: Deploy SAM application
 Write-Host "`n[Step 3] Deploying SAM application..." -ForegroundColor Yellow
-Write-Host "Running: sam deploy" -ForegroundColor Gray
+
+$targetAccList = @()
+if ($envConfig.HUB_ACCOUNT_ID) {
+    $targetAccList += @{ id = $envConfig.HUB_ACCOUNT_ID; name = "Hub ($($envConfig.HUB_PROFILE))" }
+}
+if ($envConfig.SPOKE_PROFILES) {
+    foreach ($spoke in $envConfig.SPOKE_PROFILES) {
+        $targetAccList += @{
+            id = $spoke.accountId;
+            name = $spoke.profile;
+            roleArn = "arn:aws:iam::$($spoke.accountId):role/JungleToolsCrossAccountRole"
+        }
+    }
+}
+$scanTargetAccountsJson = $targetAccList | ConvertTo-Json -Compress
+
+Write-Host "Running: sam deploy with ScanTargetAccountsJson" -ForegroundColor Gray
 sam deploy `
     --template-file .aws-sam/build/template.yaml `
-    --stack-name sg-automation-stack `
+    --stack-name jungle-tools-stack `
     --resolve-s3 `
     --capabilities CAPABILITY_NAMED_IAM `
     --region $Region `
     --profile $Profile `
+    --parameter-overrides "ScanTargetAccountsJson='$scanTargetAccountsJson'" `
     --no-confirm-changeset
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to deploy SAM application." -ForegroundColor Red
@@ -71,7 +88,7 @@ if ($LASTEXITCODE -ne 0) {
 # Step 4: Get S3 bucket name and sync frontend
 Write-Host "`n[Step 4] Syncing frontend to S3..." -ForegroundColor Yellow
 $stackOutputs = aws cloudformation describe-stacks `
-    --stack-name sg-automation-stack `
+    --stack-name jungle-tools-stack `
     --query "Stacks[0].Outputs[?OutputKey=='FrontendWebsiteUrl'].OutputValue" `
     --output text `
     --profile $Profile `
@@ -103,7 +120,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "`n============================================================" -ForegroundColor Green
 Write-Host "Deployment Completed Successfully!" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host "`nCloudFormation Stack: sg-automation-stack" -ForegroundColor White
+Write-Host "`nCloudFormation Stack: jungle-tools-stack" -ForegroundColor White
 Write-Host "API Endpoint: " -NoNewline; Write-Host ($stackOutputs -replace 'website', 'execute-api') -ForegroundColor Cyan
 Write-Host "Frontend URL: $stackOutputs" -ForegroundColor Cyan
 Write-Host "`nNext Steps:" -ForegroundColor Yellow

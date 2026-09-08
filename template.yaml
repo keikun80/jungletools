@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AWS SAM Template for VPC Security Group Automation with Audit Logging
+Description: AWS SAM Template for Jungle Tools Console (VPC Security Group & AWS Backup Monitor)
+
+Parameters:
+  ScanTargetAccountsJson:
+    Type: String
+    Default: '[]'
+    Description: 'JSON string of target accounts to scan for backup reports'
 
 Globals:
   Function:
@@ -12,8 +18,22 @@ Globals:
     Environment:
       Variables:
         AUDIT_LOG_TABLE: !Ref SgAuditLogsTable
+        SLACK_CONFIG_TABLE: !Ref SlackConfigTable
 
 Resources:
+  # DynamoDB Table for Slack Config
+  SlackConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SlackConfig
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
   # DynamoDB Table for Audit Logs
   SgAuditLogsTable:
     Type: AWS::DynamoDB::Table
@@ -183,6 +203,158 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref SgAuditLogsTable
 
+  # 5a. Get EBS Snapshots Lambda Function
+  GetEbsSnapshotsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: getEbsSnapshots/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /backups/ebs
+            Method: GET
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:DescribeVolumes
+                - ec2:DescribeSnapshots
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/*"
+
+  # 5b. Get EFS Backups Lambda Function
+  GetEfsBackupsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: getEfsBackups/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /backups/efs
+            Method: GET
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - elasticfilesystem:DescribeFileSystems
+                - elasticfilesystem:DescribeBackupPolicy
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/*"
+
+  # 5c. Get RDS Backups Lambda Function
+  GetRdsBackupsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: getRdsBackups/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /backups/rds
+            Method: GET
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - rds:DescribeDBInstances
+                - rds:DescribeDBSnapshots
+                - rds:DescribeDBClusters
+                - rds:DescribeDBClusterSnapshots
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/*"
+
+  # 5d. Get Slack Config Lambda Function
+  GetSlackConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: getSlackConfig/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /slack/config
+            Method: GET
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SlackConfigTable
+
+  # 5e. Save Slack Config Lambda Function
+  SaveSlackConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: saveSlackConfig/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /slack/config
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SlackConfigTable
+
+  # 5f. Send Slack Notification Lambda Function
+  SendSlackNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: sendSlackNotification/app.handler
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /slack/test
+            Method: POST
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 0 * * ? *)
+            Enabled: true
+      Environment:
+        Variables:
+          SCAN_TARGET_ACCOUNTS: !Ref ScanTargetAccountsJson
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SlackConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:DescribeVolumes
+                - ec2:DescribeSnapshots
+                - elasticfilesystem:DescribeFileSystems
+                - elasticfilesystem:DescribeBackupPolicy
+                - rds:DescribeDBInstances
+                - rds:DescribeDBSnapshots
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/*"
+
   # 6. S3 Bucket for Static Website Hosting
   SgFrontendBucket:
     Type: AWS::S3::Bucket
@@ -211,10 +383,10 @@ Resources:
             Resource: !Sub 'arn:aws:s3:::${SgFrontendBucket}/*'
 
   # 8. IAM Role to allow cross-account API invocation from Hub Account
-  SgAutomationApiInvokeRole:
+  JungleToolsApiInvokeRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: SgAutomationApiInvokeRole
+      RoleName: JungleToolsApiInvokeRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

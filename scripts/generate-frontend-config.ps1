@@ -6,7 +6,7 @@ and mapping account IDs and profiles from env.json.
 
 param (
     [string]$EnvFile = "env.json",
-    [string]$StackName = "sg-automation-stack"
+    [string]$StackName = "jungle-tools-stack"
 )
 
 if (Test-Path $EnvFile) {
@@ -87,7 +87,7 @@ window.APP_CONFIG = {
   apiEndpoint: "$apiEndpoint",
   defaultRegion: "$region",
   localAccountId: "$hubId",
-  defaultRoleName: "SgAutomationCrossAccountRole",
+  defaultRoleName: "JungleToolsCrossAccountRole",
   targetAccounts: $targetAccountsJson
 };
 "@

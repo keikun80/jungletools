@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Cross-Account IAM Role Setup for Security Group Automation'
+Description: 'Cross-Account IAM Role Setup for Jungle Tools Console'
 
 Parameters:
   HubAccountId:
@@ -8,7 +8,7 @@ Parameters:
     Description: 'AWS Account ID of the Hub / Operator Account'
   RoleName:
     Type: String
-    Default: 'SgAutomationCrossAccountRole'
+    Default: 'JungleToolsCrossAccountRole'
     Description: 'Name of the Cross-Account IAM Role to create'
 
 Resources:
@@ -24,7 +24,7 @@ Resources:
               AWS: !Sub 'arn:aws:iam::${HubAccountId}:root'
             Action: 'sts:AssumeRole'
       Policies:
-        - PolicyName: SgAutomationPolicy
+        - PolicyName: JungleToolsPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -40,6 +40,14 @@ Resources:
                   - ec2:RevokeSecurityGroupIngress
                   - ec2:AuthorizeSecurityGroupEgress
                   - ec2:RevokeSecurityGroupEgress
+                  - ec2:DescribeSnapshots
+                  - ec2:DescribeVolumes
+                  - rds:DescribeDBInstances
+                  - rds:DescribeDBSnapshots
+                  - rds:DescribeDBClusters
+                  - rds:DescribeDBClusterSnapshots
+                  - elasticfilesystem:DescribeFileSystems
+                  - elasticfilesystem:DescribeBackupPolicy
                 Resource: '*'
 
 Outputs:

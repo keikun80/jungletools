@@ -29,14 +29,14 @@ Write-Host "==========================================================" -Foregro
 
 cmd /c aws cloudformation deploy `
     --template-file spoke-account-template.yaml `
-    --stack-name sg-automation-spoke-role `
+    --stack-name jungle-tools-spoke-role `
     --parameter-overrides HubAccountId=$hubId `
     --capabilities CAPABILITY_NAMED_IAM `
     --profile $Profile `
     --region $region
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "`nSuccessfully created/updated SgAutomationCrossAccountRole in profile '$Profile'!" -ForegroundColor Green
+    Write-Host "`nSuccessfully created/updated JungleToolsCrossAccountRole in profile '$Profile'!" -ForegroundColor Green
 } else {
     Write-Host "`nFailed to deploy IAM Role to profile '$Profile'." -ForegroundColor Red
 }

@@ -1,57 +1,53 @@
 #!/bin/bash
-# Usage: ./scripts/deploy-all.sh [PROFILE] [REGION]
+# Usage: ./scripts/deploy-all.sh [HUB_PROFILE] [REGION]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$ROOT_DIR/env.json"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 
-# Default values
-PROFILE=${1:-"l-iam-s2"}
-REGION=${2:-"ap-northeast-2"}
-
-# Load environment configuration
-if [ -f "../env.json" ]; then
-    HUB_PROFILE=$(grep -o '"HUB_PROFILE": *"[^"]*' "../env.json" | grep -o '[^"]*$')
-    REGION=$(grep -o '"REGION": *"[^"]*' "../env.json" | grep -o '[^"]*$')
-    PROFILE=${HUB_PROFILE:-$PROFILE}
-    echo -e "${YELLOW}Loaded configuration from env.json${NC}"
-    echo -e "  Profile: ${PROFILE}"
-    echo -e "  Region: ${REGION}"
-else
-    echo -e "${YELLOW}No env.json found. Using default values.${NC}"
-fi
-
-echo -e "${CYAN}============================================================${NC}"
-echo -e "${CYAN}SG Automation Full Deployment${NC}"
-echo -e "${CYAN}Profile: ${PROFILE}${NC}"
-echo -e "${CYAN}Region: ${REGION}${NC}"
-echo -e "${CYAN}============================================================${NC}"
-
-# Step 0: Check env.json
 echo -e "\n${YELLOW}[Step 0] Checking environment configuration...${NC}"
-if [ ! -f "../env.json" ]; then
-    echo -e "${RED}env.json not found. Please run generate-env-json.sh first.${NC}"
+if [ ! -f "$ENV_FILE" ]; then
+    echo -e "${RED}env.json not found at $ENV_FILE. Please run generate-env-json.sh first.${NC}"
     exit 1
 fi
 
+HUB_PROFILE=${1:-$(node -e "console.log(require('$ENV_FILE').HUB_PROFILE || '')")}
+REGION=${2:-$(node -e "console.log(require('$ENV_FILE').REGION || 'ap-northeast-2')")}
+
+if [ -z "$HUB_PROFILE" ]; then
+    echo -e "${RED}Error: HUB_PROFILE could not be determined. Pass it as \$1 or set HUB_PROFILE in env.json.${NC}"
+    exit 1
+fi
+
+echo -e "${CYAN}============================================================${NC}"
+echo -e "${CYAN}Jungle Tools Console Deployment${NC}"
+echo -e "${CYAN}Profile: ${HUB_PROFILE}${NC}"
+echo -e "${CYAN}Region: ${REGION}${NC}"
+echo -e "${CYAN}============================================================${NC}"
+
 # Step 1: Install backend dependencies
 echo -e "\n${YELLOW}[Step 1] Installing backend dependencies...${NC}"
-cd "../backend"
+cd "$ROOT_DIR/backend"
 echo -e "${CYAN}Running: npm install${NC}"
 npm install
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to install backend dependencies.${NC}"
     exit 1
 fi
-cd "../"
+cd "$ROOT_DIR"
 
 # Step 2: Build SAM application
 echo -e "\n${YELLOW}[Step 2] Building SAM application...${NC}"
 echo -e "${CYAN}Running: sam build${NC}"
-sam build --template-file template.yaml --build-dir .aws-sam/build --use-container
+sam build --template-file "$ROOT_DIR/template.yaml" --build-dir "$ROOT_DIR/.aws-sam/build"
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to build SAM application.${NC}"
     exit 1
@@ -59,14 +55,38 @@ fi
 
 # Step 3: Deploy SAM application
 echo -e "\n${YELLOW}[Step 3] Deploying SAM application...${NC}"
-echo -e "${CYAN}Running: sam deploy${NC}"
+SCAN_TARGET_ACCOUNTS_JSON=$(node -e "
+  const fs = require('fs');
+  if (!fs.existsSync('$ENV_FILE')) {
+    console.log('[]');
+    process.exit(0);
+  }
+  const env = JSON.parse(fs.readFileSync('$ENV_FILE', 'utf8'));
+  const accounts = [];
+  if (env.HUB_ACCOUNT_ID) {
+    accounts.push({ id: env.HUB_ACCOUNT_ID, name: 'Hub (' + (env.HUB_PROFILE || 'Hub') + ')' });
+  }
+  if (Array.isArray(env.SPOKE_PROFILES)) {
+    env.SPOKE_PROFILES.forEach(s => {
+      accounts.push({
+        id: s.accountId,
+        name: s.profile,
+        roleArn: 'arn:aws:iam::' + s.accountId + ':role/JungleToolsCrossAccountRole'
+      });
+    });
+  }
+  console.log(JSON.stringify(accounts));
+")
+
+echo -e "${CYAN}Running: sam deploy with ScanTargetAccountsJson...${NC}"
 sam deploy \
-    --template-file .aws-sam/build/template.yaml \
-    --stack-name sg-automation-stack \
+    --template-file "$ROOT_DIR/.aws-sam/build/template.yaml" \
+    --stack-name jungle-tools-stack \
     --resolve-s3 \
     --capabilities CAPABILITY_NAMED_IAM \
     --region "$REGION" \
-    --profile "$PROFILE" \
+    --profile "$HUB_PROFILE" \
+    --parameter-overrides "ScanTargetAccountsJson='$SCAN_TARGET_ACCOUNTS_JSON'" \
     --no-confirm-changeset
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to deploy SAM application.${NC}"
@@ -76,28 +96,48 @@ fi
 # Step 4: Get S3 bucket name and sync frontend
 echo -e "\n${YELLOW}[Step 4] Syncing frontend to S3...${NC}"
 stack_outputs=$(aws cloudformation describe-stacks \
-    --stack-name sg-automation-stack \
-    --query "Stacks[0].Outputs[?OutputKey=='FrontendWebsiteUrl'].OutputValue" \
-    --output text \
-    --profile "$PROFILE" \
-    --region "$REGION" \
-    --no-paginate)
+    --stack-name jungle-tools-stack \
+    --query "Stacks[0].Outputs" \
+    --output json \
+    --profile "$HUB_PROFILE" \
+    --region "$REGION" 2>/dev/null)
 
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Failed to get stack outputs.${NC}"
+if [ $? -ne 0 ] || [ -z "$stack_outputs" ]; then
+    echo -e "${RED}Failed to get stack outputs from jungle-tools-stack.${NC}"
     exit 1
 fi
 
+website_url=$(node -e "const outputs = $stack_outputs; console.log((outputs.find(o => o.OutputKey === 'FrontendWebsiteUrl') || {}).OutputValue || '')")
+api_endpoint=$(node -e "const outputs = $stack_outputs; console.log((outputs.find(o => o.OutputKey === 'ApiEndpoint') || {}).OutputValue || '')")
+
 # Extract bucket name from website URL
-bucket_name=$(echo "$stack_outputs" | sed -e 's|https://||' -e 's|/||' -e 's|\.s3-website.*||')
+bucket_name=$(echo "$website_url" | sed -e 's|http://||' -e 's|https://||' -e 's|/||' -e 's|\.s3-website.*||' -e 's|\.s3.*||')
 echo -e "${GREEN}S3 Bucket Name: ${bucket_name}${NC}"
 
+# Update frontend/config.js with new apiEndpoint
+node -e '
+  const fs = require("fs");
+  const env = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const targetAccounts = [{ id: String(env.HUB_ACCOUNT_ID), label: "Hub Account (" + env.HUB_ACCOUNT_ID + " - " + (env.HUB_PROFILE || "Hub") + ")" }];
+  if (Array.isArray(env.SPOKE_PROFILES)) {
+    env.SPOKE_PROFILES.forEach(s => targetAccounts.push({ id: String(s.accountId), label: s.profile + " (" + s.accountId + ")" }));
+  }
+  const configObj = {
+    apiEndpoint: process.argv[2],
+    defaultRegion: process.argv[3],
+    localAccountId: String(env.HUB_ACCOUNT_ID),
+    defaultRoleName: "JungleToolsCrossAccountRole",
+    targetAccounts: targetAccounts
+  };
+  const config = "/**\n * Application AWS Configuration\n * Auto-generated by Jungle Tools deployment\n */\nwindow.APP_CONFIG = " + JSON.stringify(configObj, null, 2) + ";\n";
+  fs.writeFileSync(process.argv[4], config);
+' "$ENV_FILE" "$api_endpoint" "$REGION" "$ROOT_DIR/frontend/config.js"
+
 echo -e "${CYAN}Running: aws s3 sync frontend/ s3://$bucket_name/${NC}"
-aws s3 sync ../frontend/ "s3://$bucket_name/" \
-    --profile "$PROFILE" \
+aws s3 sync "$ROOT_DIR/frontend/" "s3://$bucket_name/" \
+    --profile "$HUB_PROFILE" \
     --region "$REGION" \
-    --delete \
-    --no-paginate
+    --delete
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Failed to sync frontend to S3.${NC}"
@@ -108,11 +148,10 @@ fi
 echo -e "\n${CYAN}============================================================${NC}"
 echo -e "${GREEN}Deployment Completed Successfully!${NC}"
 echo -e "${CYAN}============================================================${NC}"
-echo -e "\n${WHITE}CloudFormation Stack: sg-automation-stack${NC}"
-api_endpoint=$(echo "$stack_outputs" | sed 's|website|execute-api|')
+echo -e "${WHITE}CloudFormation Stack: jungle-tools-stack${NC}"
 echo -e "${WHITE}API Endpoint: ${CYAN}$api_endpoint${NC}"
-echo -e "${WHITE}Frontend URL: ${CYAN}$stack_outputs${NC}"
+echo -e "${WHITE}Frontend URL: ${CYAN}$website_url${NC}"
 echo -e "\n${YELLOW}Next Steps:${NC}"
-echo -e "  1. Open the Frontend URL in your browser"
-echo -e "  2. Configure IAM credentials with MFA for authentication"
+echo -e "  1. Open the Frontend URL in your browser: $website_url"
+echo -e "  2. Ensure Cross-Account roles are deployed via ./scripts/setup-all-spokes.sh"
 echo -e "  3. Refer to README.md for usage instructions"

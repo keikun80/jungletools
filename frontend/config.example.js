@@ -13,7 +13,7 @@ window.APP_CONFIG = {
   localAccountId: "123456789012",
   
   // Cross-Account IAM Role Name
-  defaultRoleName: "SgAutomationCrossAccountRole",
+  defaultRoleName: "JungleToolsCrossAccountRole",
   
   // Target Accounts List for Selector
   targetAccounts: [
