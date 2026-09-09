@@ -343,6 +343,22 @@ Resources:
             Method: GET
             Auth:
               Authorizer: NONE
+        WebhookTestEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /slack/webhook/test
+            Method: POST
+            Auth:
+              Authorizer: NONE
+        WebhookEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /slack/webhook
+            Method: POST
+            Auth:
+              Authorizer: NONE
         ScheduleEvent:
           Type: Schedule
           Properties:

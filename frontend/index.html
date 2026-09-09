@@ -56,9 +56,13 @@
           <i data-lucide="hard-drive"></i>
           <span>Backup Monitor</span>
         </button>
-        <button id="nav-slack" class="nav-item">
-          <i data-lucide="bell"></i>
-          <span>슬랙 관리</span>
+        <button id="nav-slack-webhook" class="nav-item">
+          <i data-lucide="webhook"></i>
+          <span>슬랙 웹훅</span>
+        </button>
+        <button id="nav-slack-email" class="nav-item">
+          <i data-lucide="mail"></i>
+          <span>슬랙 메일 알림</span>
         </button>
       </nav>
     </aside>
@@ -465,8 +469,70 @@
         </div>
       </section>
 
-      <!-- View 5: Slack Notification Management -->
-      <section id="view-slack" class="content-view">
+      <!-- View 5: Slack Webhook Management -->
+      <section id="view-slack-webhook" class="content-view">
+        <div class="view-header" style="margin-bottom: 20px;">
+          <div>
+            <h2>Slack Webhook Management</h2>
+            <p>슬랙 웹훅(Incoming Webhook) URL 설정, 전송 메시지 타입 선택 및 테스트 전송</p>
+          </div>
+        </div>
+
+        <div class="slack-config-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; max-width: 720px; box-shadow: var(--shadow-sm);">
+          
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="slack-webhook-url" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              Slack Webhook URL <span class="required" style="color: var(--danger);">*</span>
+            </label>
+            <input type="text" id="slack-webhook-url" placeholder="https://hooks.slack.com/services/YOUR/WEBHOOK/URL" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
+              Slack App &gt; Incoming Webhooks에서 생성한 Webhook URL을 입력하세요.
+            </p>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="slack-webhook-msg-type" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              전송 메시지 타입 (Message Format)
+            </label>
+            <select id="slack-webhook-msg-type" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-size: 0.85rem;">
+              <option value="summary" selected>summary (요약: 제목 및 정상/실패 개수만 전송)</option>
+              <option value="report">report (리포트: 본문 텍스트 전체 전송)</option>
+              <option value="preview">preview (미리보기: 제목 + 상태 + 일시)</option>
+              <option value="full">full (전체: 제목 + 본문 텍스트 전체 전송)</option>
+            </select>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
+              웹훅으로 전송할 알림 메시지의 형식을 선택하세요.
+            </p>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem;">웹훅 알림 활성화</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">웹훅 알림 기능을 활성화합니다.</div>
+            </div>
+            <label class="switch-toggle" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+              <input type="checkbox" id="slack-webhook-enabled-toggle" style="opacity: 0; width: 0; height: 0;">
+              <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .3s; border-radius: 24px;"></span>
+            </label>
+          </div>
+
+          <div style="display: flex; gap: 12px; justify-content: flex-end; align-items: center; border-top: 1px solid var(--border-color); padding-top: 20px;">
+            <span id="slack-webhook-last-sent-time" style="font-size: 0.78rem; color: var(--text-muted); margin-right: auto;">최근 전송: 없음</span>
+            <button id="btn-test-webhook" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="send" style="width: 14px; height: 14px;"></i>
+              <span>테스트 웹훅 전송</span>
+            </button>
+            <button id="btn-save-webhook" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="save" style="width: 14px; height: 14px;"></i>
+              <span>설정 저장</span>
+            </button>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- View 6: Slack Email Management -->
+      <section id="view-slack-email" class="content-view">
         <div class="view-header" style="margin-bottom: 20px;">
           <div>
             <h2>Slack Channel Email Management</h2>
@@ -493,6 +559,21 @@
             <input type="email" id="slack-sender-email" placeholder="미입력 시 채널 이메일 주소 사용" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
             <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
               AWS SES에 검증(Verified Identity)된 발신 이메일 주소를 입력하세요.
+            </p>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="slack-email-msg-type" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              전송 메시지 타입 (Message Format)
+            </label>
+            <select id="slack-email-msg-type" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-size: 0.85rem;">
+              <option value="report" selected>report (리포트: HTML/Plain 텍스트 리포트)</option>
+              <option value="summary">summary (요약: 제목 및 정상/실패 개수)</option>
+              <option value="preview">preview (미리보기: 제목 + 상태 + 일시)</option>
+              <option value="full">full (전체: 제목 + 전체 리포트)</option>
+            </select>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
+              이메일 알림 메시지의 형식을 선택하세요.
             </p>
           </div>
 

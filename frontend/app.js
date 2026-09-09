@@ -17,13 +17,17 @@ const apiStatusText = document.getElementById('api-status-text');
 const navDashboard = document.getElementById('nav-dashboard');
 const navBackups = document.getElementById('nav-backups');
 const navLogs = document.getElementById('nav-logs');
-const navSlack = document.getElementById('nav-slack');
+const navSlackWebhook = document.getElementById('nav-slack-webhook');
+const navSlackEmail = document.getElementById('nav-slack-email');
 const viewDashboard = document.getElementById('view-dashboard');
 const viewSgDetail = document.getElementById('view-sg-detail');
 const viewLogs = document.getElementById('view-logs');
 const viewBackups = document.getElementById('view-backups');
-const viewSlack = document.getElementById('view-slack');
+const viewSlackWebhook = document.getElementById('view-slack-webhook');
+const viewSlackEmail = document.getElementById('view-slack-email');
 
+const btnSaveWebhook = document.getElementById('btn-save-webhook');
+const btnTestWebhook = document.getElementById('btn-test-webhook');
 const btnSaveSlack = document.getElementById('btn-save-slack');
 const btnTestSlack = document.getElementById('btn-test-slack');
 
@@ -197,14 +201,26 @@ function setupEventListeners() {
     switchView('logs');
     fetchAuditLogs();
   });
-  if (navSlack) {
-    navSlack.addEventListener('click', () => {
-      switchView('slack');
+  if (navSlackWebhook) {
+    navSlackWebhook.addEventListener('click', () => {
+      switchView('slack-webhook');
       fetchSlackConfig();
     });
   }
+  if (navSlackEmail) {
+    navSlackEmail.addEventListener('click', () => {
+      switchView('slack-email');
+      fetchSlackConfig();
+    });
+  }
+  if (btnSaveWebhook) {
+    btnSaveWebhook.addEventListener('click', saveSlackWebhookConfig);
+  }
+  if (btnTestWebhook) {
+    btnTestWebhook.addEventListener('click', sendTestWebhookNotification);
+  }
   if (btnSaveSlack) {
-    btnSaveSlack.addEventListener('click', saveSlackConfig);
+    btnSaveSlack.addEventListener('click', saveSlackEmailConfig);
   }
   if (btnTestSlack) {
     btnTestSlack.addEventListener('click', sendTestSlackNotification);
@@ -550,13 +566,15 @@ function switchView(viewName) {
   navDashboard.classList.remove('active');
   if (navBackups) navBackups.classList.remove('active');
   navLogs.classList.remove('active');
-  if (navSlack) navSlack.classList.remove('active');
+  if (navSlackWebhook) navSlackWebhook.classList.remove('active');
+  if (navSlackEmail) navSlackEmail.classList.remove('active');
   
   viewDashboard.classList.remove('active');
   viewSgDetail.classList.remove('active');
   viewLogs.classList.remove('active');
   if (viewBackups) viewBackups.classList.remove('active');
-  if (viewSlack) viewSlack.classList.remove('active');
+  if (viewSlackWebhook) viewSlackWebhook.classList.remove('active');
+  if (viewSlackEmail) viewSlackEmail.classList.remove('active');
 
   const parentBreadcrumb = document.getElementById('breadcrumb-parent');
   const activeBreadcrumb = document.getElementById('breadcrumb-active');
@@ -576,11 +594,16 @@ function switchView(viewName) {
     viewLogs.classList.add('active');
     parentBreadcrumb.textContent = 'Console';
     activeBreadcrumb.textContent = 'Audit Logs';
-  } else if (viewName === 'slack') {
-    if (navSlack) navSlack.classList.add('active');
-    if (viewSlack) viewSlack.classList.add('active');
+  } else if (viewName === 'slack-webhook') {
+    if (navSlackWebhook) navSlackWebhook.classList.add('active');
+    if (viewSlackWebhook) viewSlackWebhook.classList.add('active');
     parentBreadcrumb.textContent = 'Console';
-    activeBreadcrumb.textContent = 'Slack Management';
+    activeBreadcrumb.textContent = 'Slack Webhook';
+  } else if (viewName === 'slack-email') {
+    if (navSlackEmail) navSlackEmail.classList.add('active');
+    if (viewSlackEmail) viewSlackEmail.classList.add('active');
+    parentBreadcrumb.textContent = 'Console';
+    activeBreadcrumb.textContent = 'Slack Email Alarm';
   } else if (viewName === 'detail') {
     viewSgDetail.classList.add('active');
     parentBreadcrumb.textContent = 'Security Groups';
@@ -1596,14 +1619,36 @@ async function fetchSlackConfig() {
     }
 
     const config = data.config || {};
+    
+    // Webhook fields
+    const webhookUrlInput = document.getElementById('slack-webhook-url');
+    const webhookMsgTypeSelect = document.getElementById('slack-webhook-msg-type');
+    const webhookEnabledToggle = document.getElementById('slack-webhook-enabled-toggle');
+    const webhookLastSentLabel = document.getElementById('slack-webhook-last-sent-time');
+
+    if (webhookUrlInput) webhookUrlInput.value = config.webhookUrl || '';
+    if (webhookMsgTypeSelect) webhookMsgTypeSelect.value = config.webhookMessageType || 'summary';
+    if (webhookEnabledToggle) webhookEnabledToggle.checked = config.webhookEnabled === true;
+    if (webhookLastSentLabel) {
+      if (config.lastWebhookSentTimestamp) {
+        const d = new Date(config.lastWebhookSentTimestamp);
+        webhookLastSentLabel.textContent = `최근 전송: ${d.toLocaleString('ko-KR')}`;
+      } else {
+        webhookLastSentLabel.textContent = '최근 전송: 없음';
+      }
+    }
+
+    // Email fields
     const channelEmailInput = document.getElementById('slack-channel-email');
     const senderEmailInput = document.getElementById('slack-sender-email');
+    const emailMsgTypeSelect = document.getElementById('slack-email-msg-type');
     const scheduleCronSelect = document.getElementById('slack-schedule-cron');
     const enabledToggle = document.getElementById('slack-enabled-toggle');
     const lastSentLabel = document.getElementById('slack-last-sent-time');
 
     if (channelEmailInput) channelEmailInput.value = config.channelEmail || '';
     if (senderEmailInput) senderEmailInput.value = config.senderEmail || '';
+    if (emailMsgTypeSelect) emailMsgTypeSelect.value = config.emailMessageType || 'report';
     if (scheduleCronSelect) scheduleCronSelect.value = config.scheduleCron || 'cron(0 0 * * ? *)';
     if (enabledToggle) enabledToggle.checked = config.enabled === true;
     if (lastSentLabel) {
@@ -1620,18 +1665,122 @@ async function fetchSlackConfig() {
   }
 }
 
-// Save Slack Configuration
-async function saveSlackConfig() {
+// Save Slack Webhook Configuration
+async function saveSlackWebhookConfig() {
+  if (!validateEndpoint() || !validateAuth()) return;
+
+  const webhookUrlInput = document.getElementById('slack-webhook-url');
+  const webhookMsgTypeSelect = document.getElementById('slack-webhook-msg-type');
+  const webhookEnabledToggle = document.getElementById('slack-webhook-enabled-toggle');
+  const btnSaveWebhook = document.getElementById('btn-save-webhook');
+
+  const webhookUrl = webhookUrlInput ? webhookUrlInput.value.trim() : '';
+  const webhookMessageType = webhookMsgTypeSelect ? webhookMsgTypeSelect.value : 'summary';
+  const webhookEnabled = webhookEnabledToggle ? webhookEnabledToggle.checked : false;
+
+  if (!webhookUrl) {
+    showToast('Slack Webhook URL을 입력해주세요.', 'warning');
+    return;
+  }
+
+  try {
+    if (btnSaveWebhook) {
+      btnSaveWebhook.disabled = true;
+      btnSaveWebhook.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>저장 중...</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+
+    const res = await signedFetch(`${apiEndpoint}/slack/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl, webhookMessageType, webhookEnabled })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Slack Webhook 설정 저장에 실패했습니다.');
+    }
+
+    showToast('Slack Webhook 설정이 성공적으로 저장되었습니다.', 'success');
+  } catch (error) {
+    console.error('Failed to save Slack Webhook config:', error);
+    showToast(`Slack Webhook 설정 저장 실패: ${error.message}`, 'danger');
+  } finally {
+    if (btnSaveWebhook) {
+      btnSaveWebhook.disabled = false;
+      btnSaveWebhook.innerHTML = `<i data-lucide="save"></i> <span>설정 저장</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+
+// Send Test Webhook Notification
+async function sendTestWebhookNotification() {
+  if (!validateEndpoint() || !validateAuth()) return;
+
+  const webhookUrlInput = document.getElementById('slack-webhook-url');
+  const webhookMsgTypeSelect = document.getElementById('slack-webhook-msg-type');
+  const btnTestWebhook = document.getElementById('btn-test-webhook');
+
+  const webhookUrl = webhookUrlInput ? webhookUrlInput.value.trim() : '';
+  const messageType = webhookMsgTypeSelect ? webhookMsgTypeSelect.value : 'summary';
+
+  if (!webhookUrl) {
+    showToast('Slack Webhook URL을 입력한 후 테스트를 진행해주세요.', 'warning');
+    return;
+  }
+
+  try {
+    if (btnTestWebhook) {
+      btnTestWebhook.disabled = true;
+      btnTestWebhook.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>전송 중...</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+
+    const res = await signedFetch(`${apiEndpoint}/slack/webhook/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl, messageType, isTest: true, scanAll: true, isWebhook: true })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || '테스트 웹훅 전송에 실패했습니다.');
+    }
+
+    showToast(`슬랙 웹훅 전송 성공! (${messageType.toUpperCase()} 타입)`, 'success');
+    
+    const webhookLastSentLabel = document.getElementById('slack-webhook-last-sent-time');
+    if (webhookLastSentLabel && data.timestamp) {
+      const d = new Date(data.timestamp);
+      webhookLastSentLabel.textContent = `최근 전송: ${d.toLocaleString('ko-KR')}`;
+    }
+  } catch (error) {
+    console.error('Failed to send test Slack Webhook:', error);
+    showToast(`테스트 웹훅 전송 실패: ${error.message}`, 'danger');
+  } finally {
+    if (btnTestWebhook) {
+      btnTestWebhook.disabled = false;
+      btnTestWebhook.innerHTML = `<i data-lucide="send"></i> <span>테스트 웹훅 전송</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+
+// Save Slack Email Configuration
+async function saveSlackEmailConfig() {
   if (!validateEndpoint() || !validateAuth()) return;
 
   const channelEmailInput = document.getElementById('slack-channel-email');
   const senderEmailInput = document.getElementById('slack-sender-email');
+  const emailMsgTypeSelect = document.getElementById('slack-email-msg-type');
   const scheduleCronSelect = document.getElementById('slack-schedule-cron');
   const enabledToggle = document.getElementById('slack-enabled-toggle');
   const btnSaveSlack = document.getElementById('btn-save-slack');
 
   const channelEmail = channelEmailInput ? channelEmailInput.value.trim() : '';
   const senderEmail = senderEmailInput ? senderEmailInput.value.trim() : '';
+  const emailMessageType = emailMsgTypeSelect ? emailMsgTypeSelect.value : 'report';
   const scheduleCron = scheduleCronSelect ? scheduleCronSelect.value : 'cron(0 0 * * ? *)';
   const enabled = enabledToggle ? enabledToggle.checked : false;
 
@@ -1650,7 +1799,7 @@ async function saveSlackConfig() {
     const res = await signedFetch(`${apiEndpoint}/slack/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channelEmail, senderEmail, scheduleCron, enabled })
+      body: JSON.stringify({ channelEmail, senderEmail, emailMessageType, scheduleCron, enabled })
     });
 
     const data = await res.json();
@@ -1677,9 +1826,12 @@ async function sendTestSlackNotification() {
 
   const channelEmailInput = document.getElementById('slack-channel-email');
   const senderEmailInput = document.getElementById('slack-sender-email');
+  const emailMsgTypeSelect = document.getElementById('slack-email-msg-type');
   const btnTestSlack = document.getElementById('btn-test-slack');
+
   const channelEmail = channelEmailInput ? channelEmailInput.value.trim() : '';
   const senderEmail = senderEmailInput ? senderEmailInput.value.trim() : '';
+  const messageType = emailMsgTypeSelect ? emailMsgTypeSelect.value : 'report';
 
   if (!channelEmail) {
     showToast('Slack 채널 이메일 주소를 입력한 후 테스트를 진행해주세요.', 'warning');
@@ -1696,7 +1848,7 @@ async function sendTestSlackNotification() {
     const res = await signedFetch(`${apiEndpoint}/slack/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channelEmail, senderEmail, isTest: true, scanAll: true })
+      body: JSON.stringify({ channelEmail, senderEmail, messageType, isTest: true, scanAll: true })
     });
 
     const data = await res.json();
@@ -1704,7 +1856,7 @@ async function sendTestSlackNotification() {
       throw new Error(data.message || '테스트 이메일 전송에 실패했습니다.');
     }
 
-    showToast(`슬랙 채널 이메일 전송 성공! (Failure: ${data.totalFailure || 0}건)`, 'success');
+    showToast(`슬랙 채널 이메일 전송 성공! (${messageType.toUpperCase()} 타입, Failure: ${data.totalFailure || 0}건)`, 'success');
     
     const lastSentLabel = document.getElementById('slack-last-sent-time');
     if (lastSentLabel && data.timestamp) {

@@ -16,13 +16,20 @@ export const handler = async (event) => {
       })
     );
 
-    const config = result.Item || {
+    const item = result.Item || {};
+    const config = {
       id: "default",
-      channelEmail: "",
-      senderEmail: "",
-      scheduleCron: "cron(0 0 * * ? *)",
-      enabled: false,
-      lastSentTimestamp: null
+      webhookUrl: item.webhookUrl || "",
+      webhookMessageType: item.webhookMessageType || "summary",
+      webhookEnabled: item.webhookEnabled === true,
+      channelEmail: item.channelEmail || "",
+      senderEmail: item.senderEmail || "",
+      scheduleCron: item.scheduleCron || "cron(0 0 * * ? *)",
+      enabled: item.enabled === true,
+      emailMessageType: item.emailMessageType || "report",
+      lastSentTimestamp: item.lastSentTimestamp || null,
+      lastWebhookSentTimestamp: item.lastWebhookSentTimestamp || null,
+      updatedAt: item.updatedAt || null
     };
 
     return buildResponse(200, { config });
