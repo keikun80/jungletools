@@ -42,28 +42,90 @@ A serverless operation solution designed to centrally manage EC2 Security Groups
 
 ## 🏗️ System Architecture
 
+### 1. Overall System Architecture Diagram
+
+```mermaid
+flowchart TB
+    subgraph Client ["Client & Integrations Layer"]
+        Browser["🖥️ Web Console (Static Frontend)"]
+        SlackBot["🤖 Slack Bot / External System"]
+    end
+
+    subgraph HubAccount ["Hub Account (Main Operations)"]
+        S3["🪣 S3 Bucket<br/>(Static Website)"]
+        APIGW["⚡ API Gateway v2<br/>(HTTP API)"]
+        
+        subgraph Lambdas ["AWS Lambda Backend (Node.js 20.x)"]
+            SG_Func["🔒 Security Group Handlers<br/>(Get/Create/Update/Delete)"]
+            Backup_Func["💾 Backup Handlers<br/>(EBS / EFS / RDS)"]
+            Slack_Func["📩 Send/Report Notification<br/>(sendSlackNotification)"]
+        end
+
+        subgraph Storage ["Storage & Cache Layer"]
+            AuditDB[("📊 DynamoDB: SgAuditLogs")]
+            SlackDB[("⚙️ DynamoDB: SlackConfig / Cache")]
+        end
+
+        SES["📧 AWS SES<br/>(Simple Email Service)"]
+        EventBridge["⏰ EventBridge Cron<br/>(Daily Cron Schedule)"]
+    end
+
+    subgraph SpokeAccounts ["Spoke Accounts (Target AWS Accounts)"]
+        SpokeRole["🔑 JungleToolsCrossAccountRole<br/>(STS AssumeRole)"]
+        EBS["💾 EBS Volumes & Snapshots"]
+        EFS["📁 EFS Backup Policies"]
+        RDS["🗄️ RDS DB & Clusters"]
+    end
+
+    Browser -->|S3 Static Hosting| S3
+    Browser -->|HTTP Requests - SigV4 Auth| APIGW
+    SlackBot -->|GET /slack/report| APIGW
+    
+    APIGW --> Lambdas
+    EventBridge -->|Daily Trigger| Slack_Func
+
+    SG_Func --> AuditDB
+    Slack_Func --> SlackDB
+    Slack_Func -->|Send Email| SES
+    SES -->|Deliver Report| SlackChannel["💬 Slack Channel Email"]
+
+    Lambdas -->|STS AssumeRole| SpokeRole
+    SpokeRole --> EBS
+    SpokeRole --> EFS
+    SpokeRole --> RDS
 ```
-[ Web Browser (SigV4 Auth) ] 
-       │
-       ▼ (REST API / HTTP API v2)
-[ Hub Account: <HUB_ACCOUNT_ID> ]
-   ├── S3 Static Website (Frontend Console)
-   ├── API Gateway v2 (AWS_IAM Authorizer)
-   ├── Lambda Backend (Node.js 20.x)
-   │     ├── Security Group API Handlers
-   │     ├── Backup Monitor Handlers (EBS / EFS / RDS)
-   │     ├── Slack Config Handlers (DynamoDB Integration)
-   │     └── SendSlackNotification Handler (AWS SES Email Dispatch)
-   ├── DynamoDB Tables
-   │     ├── SgAuditLogs (Security Group Audit Logs)
-   │     └── SlackConfig (Slack Channel Email Config)
-   └── AWS SES (Simple Email Service) ──► [ Slack Channel Email ]
-       │
-       ▼ (STS AssumeRole - Cross-Account Role Assumption)
-[ Spoke Accounts (Target Management Accounts) ]
-   ├── Spoke Account 1 (<SPOKE_ACCOUNT_ID_1>) -> JungleToolsCrossAccountRole
-   ├── Spoke Account 2 (<SPOKE_ACCOUNT_ID_2>) -> JungleToolsCrossAccountRole
-   └── Other Configured Profile Accounts...     -> JungleToolsCrossAccountRole
+
+### 2. Slack Report & Fast DynamoDB Caching Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Slack Bot / Browser
+    participant APIGW as API Gateway v2
+    participant Lambda as sendSlackNotification Lambda
+    participant DDB as DynamoDB (SlackConfig)
+    participant AWS as Multi-Account AWS Services
+    participant SES as AWS SES (Slack Email)
+
+    alt 1. Normal Request (Slack Bot / Default GET - Fast Cache Response)
+        Client->>APIGW: GET /slack/report (or /slack/preview)
+        APIGW->>Lambda: Trigger Event
+        Lambda->>DDB: GetItem (id: default)
+        DDB-->>Lambda: Return Cached latestReport
+        Lambda-->>Client: HTTP 200 OK (JSON Report) [74ms Response]
+    else 2. Forced Refresh or Cron Scheduler (Live Scan & Cache Auto-Update)
+        Client->>APIGW: GET /slack/report?refresh=true (or EventBridge Cron)
+        APIGW->>Lambda: Trigger Event
+        Lambda->>AWS: STS AssumeRole & Multi-Account Scan (EBS, EFS, RDS)
+        AWS-->>Lambda: Return Volume, Policy, DB Snapshot Statuses
+        Lambda->>Lambda: Generate Report (Subject, Summary, HTML/Text Bodies)
+        Lambda->>DDB: UpdateItem (Set latestReport Cache)
+        opt If Email Dispatch Event
+            Lambda->>SES: SendEmail (Slack Channel Email)
+            SES-->>Lambda: Sent Success
+        end
+        Lambda-->>Client: HTTP 200 OK (Fresh JSON Report)
+    end
 ```
 
 ---

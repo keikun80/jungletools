@@ -48,41 +48,77 @@ export const handler = async (event) => {
       body = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
     }
 
+    const httpMethod = event.requestContext?.http?.method || event.httpMethod || "POST";
+    const requestPath = event.rawPath || event.requestContext?.http?.path || "";
+    const isGetOrPreview = 
+      httpMethod === "GET" || 
+      requestPath === "/slack/report" ||
+      requestPath === "/slack/preview" ||
+      body.preview === true ||
+      body.dryRun === true;
+
+    const isRefreshRequested = 
+      event.queryStringParameters?.refresh === "true" || 
+      body.refresh === true;
+
+    // Fast-path for GET/preview: return cached report if available and refresh is not forced
+    if (isGetOrPreview && !isRefreshRequested) {
+      try {
+        const configRes = await docClient.send(
+          new GetCommand({
+            TableName: SLACK_CONFIG_TABLE,
+            Key: { id: "default" }
+          })
+        );
+        if (configRes.Item?.latestReport) {
+          console.log("Serving report from DynamoDB cache (<50ms)");
+          return buildResponse(200, configRes.Item.latestReport);
+        }
+      } catch (e) {
+        console.warn("Failed to read latestReport cache from DynamoDB:", e.message);
+      }
+    }
+
     let channelEmail = body.channelEmail || "";
     let senderEmail = body.senderEmail || "";
     let isTest = body.isTest === true;
 
-    // 1. If channelEmail is not explicitly passed in test body, fetch from DynamoDB
-    if (!channelEmail) {
-      const configRes = await docClient.send(
-        new GetCommand({
-          TableName: SLACK_CONFIG_TABLE,
-          Key: { id: "default" }
-        })
-      );
-      const config = configRes.Item || {};
-      channelEmail = config.channelEmail;
-      senderEmail = senderEmail || config.senderEmail;
+    if (!isGetOrPreview) {
+      // 1. If channelEmail is not explicitly passed in test body, fetch from DynamoDB
+      if (!channelEmail) {
+        const configRes = await docClient.send(
+          new GetCommand({
+            TableName: SLACK_CONFIG_TABLE,
+            Key: { id: "default" }
+          })
+        );
+        const config = configRes.Item || {};
+        channelEmail = config.channelEmail;
+        senderEmail = senderEmail || config.senderEmail;
 
-      // If scheduled cron run and disabled, exit
-      if (!isTest && config.enabled === false) {
-        console.log("Slack Email notification is disabled in config. Skipping.");
-        return buildResponse(200, { message: "Slack Email notification is disabled." });
+        // If scheduled cron run and disabled, exit
+        if (!isTest && config.enabled === false) {
+          console.log("Slack Email notification is disabled in config. Skipping.");
+          return buildResponse(200, { message: "Slack Email notification is disabled." });
+        }
+      }
+
+      if (!channelEmail) {
+        return buildResponse(400, { message: "No Slack Channel Email address configured." });
       }
     }
 
-    if (!channelEmail) {
-      return buildResponse(400, { message: "No Slack Channel Email address configured." });
-    }
+    let toAddresses = [];
+    if (!isGetOrPreview) {
+      // Support multiple comma/semicolon/space-separated emails
+      toAddresses = channelEmail
+        .split(/[,;\s]+/)
+        .map(e => e.trim())
+        .filter(e => e.length > 0);
 
-    // Support multiple comma/semicolon/space-separated emails
-    const toAddresses = channelEmail
-      .split(/[,;\s]+/)
-      .map(e => e.trim())
-      .filter(e => e.length > 0);
-
-    if (toAddresses.length === 0) {
-      return buildResponse(400, { message: "No valid Slack Channel Email address configured." });
+      if (toAddresses.length === 0) {
+        return buildResponse(400, { message: "No valid Slack Channel Email address configured." });
+      }
     }
 
     if (!senderEmail) {
@@ -372,7 +408,9 @@ export const handler = async (event) => {
     const fullDateFormatted = `${year}년 ${month}월 ${day}일 (${hours}:${minutes} KST 기준시)`;
 
     const nonUnprotectedTotal = totalHealthy + totalFailure;
-    const subjectText = `[${dateOnlyFormatted}] 백화점BO 백업 모니터링 (${totalHealthy} / ${nonUnprotectedTotal})`;
+    const isAllHealthy = nonUnprotectedTotal > 0 ? (totalHealthy === nonUnprotectedTotal) : true;
+    const backupStatusText = isAllHealthy ? "이상없습니다." : "확인 중";
+    const subjectText = `[${dateOnlyFormatted}] 백화점BO개발팀 백업 ${backupStatusText} (${totalHealthy} / ${nonUnprotectedTotal})`;
 
     const htmlBody = `
 <!DOCTYPE html>
@@ -412,56 +450,13 @@ export const handler = async (event) => {
     <div class="summary-box">
       <div style="font-weight: 700; font-size: 14px; margin-bottom: 10px;">전체 요약</div>
       <div class="summary-grid">
-        <div class="summary-item bg-healthy">Healthy: ${totalHealthy}개</div>
-        <div class="summary-item bg-failure">Failure: ${totalFailure}개</div>
-        <div class="summary-item bg-unprotected">Unprotected: ${totalUnprotected}개</div>
+        <div class="summary-item bg-healthy">Success: ${totalHealthy}개</div>
+        <div class="summary-item bg-failure">Error: ${totalFailure}개</div>
       </div>
       <div style="font-size: 12px; color: #475569; margin-top: 10px; text-align: right;">
-        * 모니터링 비율 (Healthy / Unprotected 제외 전체): <strong>${totalHealthy} / ${nonUnprotectedTotal}</strong>
+        * 모니터링 비율: <strong>${totalHealthy} / ${nonUnprotectedTotal}</strong>
       </div>
     </div>
-
-    <div style="font-weight: 700; font-size: 15px; margin-bottom: 12px; color: #0f172a;">🏢 프로파일(계정)별 백업/스냅샷 현황</div>
-
-    ${accountReports.map(acc => {
-      const accHealthy = acc.ebs.healthy + acc.efs.healthy + acc.rds.healthy;
-      const accFailure = acc.ebs.failure + acc.efs.failure + acc.rds.failure;
-      const accUnprotected = acc.ebs.unprotected + acc.efs.unprotected + acc.rds.unprotected;
-      
-      return `
-        <div class="account-section">
-          <div class="account-header">
-            <span>🏢 ${acc.name}</span>
-            <span style="font-size: 12px; color: #64748b; font-weight: normal;">(ID: ${acc.id})</span>
-          </div>
-          <div class="account-body">
-            <div class="account-counts">
-              🟢 Healthy: ${accHealthy}개 | 🔴 Failure: ${accFailure}개 | ⚪ Unprotected: ${accUnprotected}개
-              <span style="color: #64748b; font-weight: normal; margin-left: 6px;">(EBS: ${acc.ebs.healthy + acc.ebs.failure + acc.ebs.unprotected} | EFS: ${acc.efs.healthy + acc.efs.failure + acc.efs.unprotected} | RDS: ${acc.rds.healthy + acc.rds.failure + acc.rds.unprotected})</span>
-            </div>
-            ${acc.items.length > 0 ? `
-              <ul class="item-list">
-                ${acc.items.map(iss => {
-                  let cls = "item-healthy";
-                  let icon = "🟢";
-                  if (iss.status === "Failure") { cls = "item-failure"; icon = "🔴"; }
-                  else if (iss.status === "Unprotected") { cls = "item-unprotected"; icon = "⚪"; }
-                  
-                  return `
-                    <li class="item-row ${cls}">
-                      <span><strong>${icon} [${iss.status}] ${iss.service}</strong>: ${iss.name ? `${iss.name} (${iss.id})` : iss.id}</span>
-                      <span style="font-size: 11px; opacity: 0.9;">${iss.detail}</span>
-                    </li>
-                  `;
-                }).join('')}
-              </ul>
-            ` : `
-              <div class="no-items">등록된 백업 대상 리소스가 없습니다.</div>
-            `}
-          </div>
-        </div>
-      `;
-    }).join('')}
 
     <div class="footer">Jungle Tools Console - AWS Multi-Account Backup Monitoring System</div>
   </div>
@@ -473,33 +468,44 @@ export const handler = async (event) => {
 기준 일시: ${fullDateFormatted}
 
 [전체 요약]
-- Healthy: ${totalHealthy}개
-- Failure: ${totalFailure}개
-- Unprotected: ${totalUnprotected}개
-- 모니터링 비율 (Healthy / Unprotected 제외 전체): ${totalHealthy} / ${nonUnprotectedTotal}
+- Success: ${totalHealthy}개
+- Error: ${totalFailure}개
+- 모니터링 비율: ${totalHealthy} / ${nonUnprotectedTotal}`;
 
-==================================================
-🏢 프로파일(계정)별 백업/스냅샷 현황
-==================================================
+    const summaryText = `제목: ${subjectText}\n정상: ${totalHealthy}개 / 실패: ${totalFailure}개`;
 
-${accountReports.map(acc => {
-  const accHealthy = acc.ebs.healthy + acc.efs.healthy + acc.rds.healthy;
-  const accFailure = acc.ebs.failure + acc.efs.failure + acc.rds.failure;
-  const accUnprotected = acc.ebs.unprotected + acc.efs.unprotected + acc.rds.unprotected;
-  
-  let str = `■ 계정: ${acc.name} (${acc.id})\n`;
-  str += `  - 요약: Healthy: ${accHealthy}개 | Failure: ${accFailure}개 | Unprotected: ${accUnprotected}개\n`;
-  if (acc.items.length > 0) {
-    str += `  - 스냅샷/백업 세부 목록:\n`;
-    acc.items.forEach(iss => {
-      let icon = iss.status === "Healthy" ? "🟢" : (iss.status === "Failure" ? "🔴" : "⚪");
-      str += `    • ${icon} [${iss.status}] ${iss.service}: ${iss.name ? `${iss.name} (${iss.id})` : iss.id} - ${iss.detail}\n`;
-    });
-  } else {
-    str += `  - 등록된 백업 대상 리소스 없음\n`;
-  }
-  return str;
-}).join('\n')}`;
+    const reportData = {
+      summary: summaryText,
+      subject: subjectText,
+      backupStatusText,
+      dateFormatted: fullDateFormatted,
+      dateOnlyFormatted,
+      totalHealthy,
+      totalFailure,
+      totalUnprotected,
+      nonUnprotectedTotal,
+      htmlBody,
+      plainTextBody,
+      cachedAt: now.toISOString()
+    };
+
+    // Save latestReport to DynamoDB cache so subsequent GET /slack/report calls respond in <50ms
+    try {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: SLACK_CONFIG_TABLE,
+          Key: { id: "default" },
+          UpdateExpression: "SET latestReport = :report",
+          ExpressionAttributeValues: { ":report": reportData }
+        })
+      );
+    } catch (e) {
+      console.warn("Failed to update latestReport cache in DynamoDB:", e.message);
+    }
+
+    if (isGetOrPreview) {
+      return buildResponse(200, reportData);
+    }
 
     // Send Email via AWS SES
     const sesRegion = process.env.AWS_REGION || "ap-northeast-2";

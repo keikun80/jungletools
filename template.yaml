@@ -327,6 +327,22 @@ Resources:
             ApiId: !Ref SgHttpApi
             Path: /slack/test
             Method: POST
+        ReportEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /slack/report
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        PreviewEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SgHttpApi
+            Path: /slack/preview
+            Method: GET
+            Auth:
+              Authorizer: NONE
         ScheduleEvent:
           Type: Schedule
           Properties:

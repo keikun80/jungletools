@@ -62,28 +62,90 @@ aws_secret_access_key = ...
 
 ## 🏗️ 시스템 아키텍처 (System Architecture)
 
+### 1. 전체 아키텍처 구성도 (System Architecture Diagram)
+
+```mermaid
+flowchart TB
+    subgraph Client ["Client & Integrations Layer"]
+        Browser["🖥️ Web Console (Static Frontend)"]
+        SlackBot["🤖 Slack Bot / External System"]
+    end
+
+    subgraph HubAccount ["Hub Account (Main Operations)"]
+        S3["🪣 S3 Bucket<br/>(Static Website)"]
+        APIGW["⚡ API Gateway v2<br/>(HTTP API)"]
+        
+        subgraph Lambdas ["AWS Lambda Backend (Node.js 20.x)"]
+            SG_Func["🔒 Security Group Handlers<br/>(Get/Create/Update/Delete)"]
+            Backup_Func["💾 Backup Handlers<br/>(EBS / EFS / RDS)"]
+            Slack_Func["📩 Send/Report Notification<br/>(sendSlackNotification)"]
+        end
+
+        subgraph Storage ["Storage & Cache Layer"]
+            AuditDB[("📊 DynamoDB: SgAuditLogs")]
+            SlackDB[("⚙️ DynamoDB: SlackConfig / Cache")]
+        end
+
+        SES["📧 AWS SES<br/>(Simple Email Service)"]
+        EventBridge["⏰ EventBridge Cron<br/>(Daily Cron Schedule)"]
+    end
+
+    subgraph SpokeAccounts ["Spoke Accounts (Target AWS Accounts)"]
+        SpokeRole["🔑 JungleToolsCrossAccountRole<br/>(STS AssumeRole)"]
+        EBS["💾 EBS Volumes & Snapshots"]
+        EFS["📁 EFS Backup Policies"]
+        RDS["🗄️ RDS DB & Clusters"]
+    end
+
+    Browser -->|S3 Static Hosting| S3
+    Browser -->|HTTP Requests - SigV4 Auth| APIGW
+    SlackBot -->|GET /slack/report| APIGW
+    
+    APIGW --> Lambdas
+    EventBridge -->|Daily Trigger| Slack_Func
+
+    SG_Func --> AuditDB
+    Slack_Func --> SlackDB
+    Slack_Func -->|Send Email| SES
+    SES -->|Deliver Report| SlackChannel["💬 Slack Channel Email"]
+
+    Lambdas -->|STS AssumeRole| SpokeRole
+    SpokeRole --> EBS
+    SpokeRole --> EFS
+    SpokeRole --> RDS
 ```
-[ 웹 브라우저 (SigV4 인증) ] 
-       │
-       ▼ (REST API / HTTP API v2)
-[ Hub 계정: <HUB_ACCOUNT_ID> ]
-   ├── S3 Static Website (프론트엔드 콘솔)
-   ├── API Gateway v2 (AWS_IAM Authorizer)
-   ├── Lambda Backend (Node.js 20.x)
-   │     ├── Security Group API Handlers
-   │     ├── Backup Monitor Handlers (EBS / EFS / RDS)
-   │     ├── Slack Config Handlers (DynamoDB 연동)
-   │     └── SendSlackNotification Handler (AWS SES 이메일 발송)
-   ├── DynamoDB Tables
-   │     ├── SgAuditLogs (보안그룹 감사로그)
-   │     └── SlackConfig (슬랙 채널 이메일 설정)
-   └── AWS SES (Simple Email Service) ──► [ Slack Channel Email ]
-       │
-       ▼ (STS AssumeRole - Cross-Account Role 수임)
-[ Spoke 계정들 (대상 관리 계정) ]
-   ├── Spoke Account 1 (<SPOKE_ACCOUNT_ID_1>) -> JungleToolsCrossAccountRole
-   ├── Spoke Account 2 (<SPOKE_ACCOUNT_ID_2>) -> JungleToolsCrossAccountRole
-   └── 기타 설정 프로필 계정들...               -> JungleToolsCrossAccountRole
+
+### 2. Slack 리포트 & 초고속 캐싱 시퀀스 (Slack Report & Fast DynamoDB Caching Sequence)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Slack Bot / Browser
+    participant APIGW as API Gateway v2
+    participant Lambda as sendSlackNotification Lambda
+    participant DDB as DynamoDB (SlackConfig)
+    participant AWS as Multi-Account AWS Services
+    participant SES as AWS SES (Slack Email)
+
+    alt 1. 일반 조회 (Slack Bot / 기본 GET - Fast Cache Response)
+        Client->>APIGW: GET /slack/report (or /slack/preview)
+        APIGW->>Lambda: Trigger Event
+        Lambda->>DDB: GetItem (id: default)
+        DDB-->>Lambda: Return Cached latestReport
+        Lambda-->>Client: HTTP 200 OK (JSON Report) [74ms Response]
+    else 2. 강제 갱신 또는 Cron 스케줄러 (Live Scan & Cache Auto-Update)
+        Client->>APIGW: GET /slack/report?refresh=true (or EventBridge Cron)
+        APIGW->>Lambda: Trigger Event
+        Lambda->>AWS: STS AssumeRole & Multi-Account Scan (EBS, EFS, RDS)
+        AWS-->>Lambda: Return Volume, Policy, DB Snapshot Statuses
+        Lambda->>Lambda: Generate Report (Subject, Summary, HTML/Text Bodies)
+        Lambda->>DDB: UpdateItem (Set latestReport Cache)
+        opt 이메일 발송 이벤트인 경우
+            Lambda->>SES: SendEmail (Slack Channel Email)
+            SES-->>Lambda: Sent Success
+        end
+        Lambda-->>Client: HTTP 200 OK (Fresh JSON Report)
+    end
 ```
 
 ---
