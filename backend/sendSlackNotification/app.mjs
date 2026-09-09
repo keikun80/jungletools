@@ -409,7 +409,7 @@ export const handler = async (event) => {
 
     const nonUnprotectedTotal = totalHealthy + totalFailure;
     const isAllHealthy = nonUnprotectedTotal > 0 ? (totalHealthy === nonUnprotectedTotal) : true;
-    const backupStatusText = isAllHealthy ? "이상없습니다." : "확인 중";
+    const backupStatusText = isAllHealthy ? "이상 없습니다." : "확인 중";
     const subjectText = `[${dateOnlyFormatted}] 백화점BO개발팀 백업 ${backupStatusText} (${totalHealthy} / ${nonUnprotectedTotal})`;
 
     const htmlBody = `
