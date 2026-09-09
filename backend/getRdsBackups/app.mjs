@@ -86,9 +86,6 @@ export const handler = async (event) => {
       }
     });
 
-    const now = new Date();
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
     let healthyCount = 0;
     let failureCount = 0;
     let unprotectedCount = 0;
@@ -112,19 +109,13 @@ export const handler = async (event) => {
       const latestSnapshotTime = latestSnap?.time ? new Date(latestSnap.time).toISOString() : null;
       const latestSnapStatus = latestSnap ? latestSnap.status : null;
 
-      const isRestorableWithin7Days = latestRestorableTime && (now - new Date(latestRestorableTime)) <= SEVEN_DAYS_MS;
-      const isLatestSnapWithin7Days = latestSnapshotTime && (now - new Date(latestSnapshotTime)) <= SEVEN_DAYS_MS;
-
-      const isHealthy = (backupRetention > 0 && isRestorableWithin7Days) || (latestSnapStatus === 'available' && isLatestSnapWithin7Days);
-      const isUnprotected = backupRetention === 0 && !latestSnap;
-
       let status = "Unprotected";
-      if (isHealthy) {
-        status = "Healthy";
-        healthyCount++;
-      } else if (isUnprotected) {
+      if (!latestSnap) {
         status = "Unprotected";
         unprotectedCount++;
+      } else if (latestSnapStatus === "available") {
+        status = "Healthy";
+        healthyCount++;
       } else {
         status = "Failure";
         failureCount++;

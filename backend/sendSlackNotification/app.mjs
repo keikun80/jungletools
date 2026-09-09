@@ -161,11 +161,8 @@ export const handler = async (event) => {
                 detail: "스냅샷 없음"
               });
             } else {
-              const ageMs = now - new Date(latest.StartTime);
-              const isHealthy = latest.State === "completed" && ageMs <= SEVEN_DAYS_MS;
-              const daysOld = Math.floor(ageMs / (24 * 3600 * 1000));
               const dateStr = latest.StartTime ? new Date(latest.StartTime).toISOString().split('T')[0] : "";
-              if (isHealthy) {
+              if (latest.State === "completed") {
                 accReport.ebs.healthy++;
                 totalHealthy++;
                 accReport.items.push({
@@ -173,7 +170,7 @@ export const handler = async (event) => {
                   status: "Healthy",
                   name: nameTag,
                   id: vol.VolumeId,
-                  detail: `최근 스냅샷: ${dateStr} (${daysOld}일 전), 상태: ${latest.State}`
+                  detail: `최근 스냅샷: ${dateStr}, 상태: ${latest.State}`
                 });
               } else {
                 accReport.ebs.failure++;
@@ -184,7 +181,7 @@ export const handler = async (event) => {
                   status: "Failure",
                   name: nameTag,
                   id: vol.VolumeId,
-                  detail: `최근 스냅샷: ${dateStr} (${daysOld}일 전), 상태: ${latest.State}`
+                  detail: `최근 스냅샷: ${dateStr}, 상태: ${latest.State}`
                 });
               }
             }
@@ -317,24 +314,9 @@ export const handler = async (event) => {
 
             const latestSnap = allSnaps[0] || null;
 
-            const isRestorableWithin7Days = rawRestorable && (now - new Date(rawRestorable)) <= SEVEN_DAYS_MS;
-            const isLatestSnapWithin7Days = latestSnap?.time && (now - new Date(latestSnap.time)) <= SEVEN_DAYS_MS;
+            const dateStr = latestSnap?.time ? new Date(latestSnap.time).toISOString().split('T')[0] : "없음";
 
-            const isHealthy = (retention > 0 && isRestorableWithin7Days) || (latestSnap?.status === 'available' && isLatestSnapWithin7Days);
-            const isUnprotected = retention === 0 && !latestSnap;
-            const dateStr = latestSnap?.time ? new Date(latestSnap.time).toISOString().split('T')[0] : (rawRestorable ? new Date(rawRestorable).toISOString().split('T')[0] : "없음");
-
-            if (isHealthy) {
-              accReport.rds.healthy++;
-              totalHealthy++;
-              accReport.items.push({
-                service: "RDS",
-                status: "Healthy",
-                name: dbId,
-                id: dbId,
-                detail: `최근 스냅샷/복구 시점: ${dateStr} (Engine: ${inst.Engine}, 보존기간: ${retention}일)`
-              });
-            } else if (isUnprotected) {
+            if (!latestSnap) {
               accReport.rds.unprotected++;
               totalUnprotected++;
               accReport.items.push({
@@ -342,7 +324,17 @@ export const handler = async (event) => {
                 status: "Unprotected",
                 name: dbId,
                 id: dbId,
-                detail: "보존 기간 0일 & 스냅샷 없음"
+                detail: "스냅샷 없음"
+              });
+            } else if (latestSnap.status === 'available') {
+              accReport.rds.healthy++;
+              totalHealthy++;
+              accReport.items.push({
+                service: "RDS",
+                status: "Healthy",
+                name: dbId,
+                id: dbId,
+                detail: `최근 스냅샷: ${dateStr} (Engine: ${inst.Engine}, 상태: ${latestSnap.status})`
               });
             } else {
               accReport.rds.failure++;
@@ -353,7 +345,7 @@ export const handler = async (event) => {
                 status: "Failure",
                 name: dbId,
                 id: dbId,
-                detail: `스냅샷/복구 시점 7일 경과 또는 오류 (Engine: ${inst.Engine})`
+                detail: `최근 스냅샷: ${dateStr} (Engine: ${inst.Engine}, 상태: ${latestSnap.status})`
               });
             }
           });

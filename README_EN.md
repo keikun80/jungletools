@@ -11,7 +11,7 @@ A serverless operation solution designed to centrally manage EC2 Security Groups
 * **Audit Logging**: Store all rule modifications in DynamoDB (`SgAuditLogs`) and view detailed history in the Audit Logs tab.
 
 ### 2. 💾 Multi-Account AWS Backup Monitor
-* **EBS Volume & Snapshot**: Track volume statuses, snapshot counts, and 7-day health criteria (`Healthy`, `Failure`, `Unprotected`).
+* **EBS Volume & Snapshot**: Track volume statuses, snapshot counts, and snapshot creation health criteria (`Healthy`: creation succeeded, `Failure`: creation failed, `Unprotected`: no snapshot).
 * **EFS File Systems**: Monitor EFS file system status and automatic backup policies (`ENABLED` / `DISABLED`).
 * **RDS & Aurora DB Clusters**: Monitor DB instances, manual/automated snapshots, and Aurora cluster `LatestRestorableTime`.
 * **Healthy Target Ratio**: Calculate `Healthy` ratio excluding `Unprotected` resources in real time.

@@ -32,9 +32,6 @@ export const handler = async (event) => {
       console.warn("Error describing snapshots:", err.message);
     }
 
-    const now = new Date();
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-    const EIGHT_DAYS_MS = 8 * 24 * 60 * 60 * 1000;
 
     // Group snapshots by VolumeId
     const snapshotMapByVolume = {};
@@ -68,12 +65,11 @@ export const handler = async (event) => {
         latestSnapshotTime = latestSnap.StartTime;
         latestSnapshotState = latestSnap.State;
 
-        const ageMs = now - new Date(latestSnap.StartTime);
-
-        // Updated Decision Logic:
-        // - State === "completed" AND <= 7 days -> Healthy
-        // - State === "error" OR >= 8 days -> Failure
-        if (latestSnap.State === "completed" && ageMs <= SEVEN_DAYS_MS) {
+        // Decision Logic:
+        // - Healthy: snapshot creation succeeded (State === "completed")
+        // - Failure: snapshot creation failed (State !== "completed", e.g. "error")
+        // - Unprotected: no snapshot exists
+        if (latestSnap.State === "completed") {
           status = "Healthy";
           healthyCount++;
         } else {
@@ -81,6 +77,7 @@ export const handler = async (event) => {
           failureCount++;
         }
       } else {
+        status = "Unprotected";
         unprotectedCount++;
       }
 

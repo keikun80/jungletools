@@ -12,7 +12,7 @@
 * **감사 로그(Audit Logs) 기록**: DynamoDB 기반 변경 이력 저장 및 웹 콘솔 내 Audit Logs 탭 조회.
 
 ### 2. 💾 멀티 계정 백업 모니터링 (AWS Backup Monitor)
-* **EBS 볼륨 & 스냅샷**: 각 계정별 EBS 볼륨 수량, 상태, 최신 스냅샷 생성 일시 및 7일 기준 백업 상태(Healthy / Failure / Unprotected) 판별.
+* **EBS 볼륨 & 스냅샷**: 각 계정별 EBS 볼륨 수량, 상태, 최신 스냅샷 생성 결과 기준 백업 상태(Healthy: 스냅샷 생성 성공, Failure: 스냅샷 생성 실패, Unprotected: 스냅샷 없음) 판별.
 * **EFS 파일 시스템**: EFS 파일 시스템 상태 및 자동 백업 정책(ENABLED / DISABLED) 점검.
 * **RDS DB 인스턴스 & Aurora 클러스터**: RDS DB 인스턴스, 수동/자동 스냅샷, Aurora DB 클러스터 최신 복구 가능 시간(`LatestRestorableTime`) 종합 진단.
 * **통합 상태 계산**: `Unprotected`(백업 대상 미설정)를 제외한 전체 백업 대상 중 `Healthy` 비율을 실시간 산출.
