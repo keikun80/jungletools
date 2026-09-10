@@ -31,39 +31,80 @@
       </div>
       
       <nav class="sidebar-nav">
-        <!-- SG Operator Group -->
+        <!-- 1. SG Manage Group -->
         <div class="nav-group">
           <div class="nav-group-header">
             <i data-lucide="shield" class="nav-group-icon"></i>
-            <span>SG Operator</span>
+            <span>SG Manage</span>
           </div>
           <div class="nav-group-items">
-            <button id="nav-dashboard" class="nav-item sub-item active">
+            <button id="nav-sg-dashboard" class="nav-item sub-item active">
               <i data-lucide="layout-dashboard"></i>
               <span>Dashboard</span>
             </button>
-            <button id="nav-logs" class="nav-item sub-item">
+            <button id="nav-sg-logs" class="nav-item sub-item">
               <i data-lucide="history"></i>
-              <span>Audit Logs</span>
+              <span>Logs</span>
             </button>
           </div>
         </div>
 
-        <div class="sidebar-divider" style="margin: 10px 0;"></div>
+        <div class="sidebar-divider" style="margin: 8px 0;"></div>
 
-        <!-- Backup Monitor Item -->
-        <button id="nav-backups" class="nav-item">
-          <i data-lucide="hard-drive"></i>
-          <span>Backup Monitor</span>
-        </button>
-        <button id="nav-slack-webhook" class="nav-item">
-          <i data-lucide="webhook"></i>
-          <span>슬랙 웹훅</span>
-        </button>
-        <button id="nav-slack-email" class="nav-item">
-          <i data-lucide="mail"></i>
-          <span>슬랙 메일 알림</span>
-        </button>
+        <!-- 2. Backup Monitor Group -->
+        <div class="nav-group">
+          <div class="nav-group-header">
+            <i data-lucide="hard-drive" class="nav-group-icon"></i>
+            <span>Backup Monitor</span>
+          </div>
+          <div class="nav-group-items">
+            <button id="nav-backup-dashboard" class="nav-item sub-item">
+              <i data-lucide="activity"></i>
+              <span>Dashboard</span>
+            </button>
+
+            <!-- Nested Subgroup: Notification -->
+            <div class="nav-nested-group">
+              <div class="nav-nested-header">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <i data-lucide="bell" class="nav-nested-icon"></i>
+                  <span>Notification</span>
+                </div>
+              </div>
+
+              <div class="nav-nested-items">
+                <!-- Slack Category -->
+                <div class="nav-category-label">
+                  <i data-lucide="message-square" style="width: 12px; height: 12px;"></i>
+                  <span>Slack</span>
+                </div>
+                <button id="nav-noti-slack-webhook" class="nav-item nested-item">
+                  <i data-lucide="webhook"></i>
+                  <span>웹훅</span>
+                </button>
+                <button id="nav-noti-slack-email" class="nav-item nested-item">
+                  <i data-lucide="mail"></i>
+                  <span>Email</span>
+                </button>
+
+                <!-- Email Category -->
+                <div class="nav-category-label" style="margin-top: 6px;">
+                  <i data-lucide="at-sign" style="width: 12px; height: 12px;"></i>
+                  <span>Email</span>
+                </div>
+                <button id="nav-noti-email-smtp" class="nav-item nested-item">
+                  <i data-lucide="server"></i>
+                  <span>SMTP</span>
+                </button>
+                <button id="nav-noti-email-recipients" class="nav-item nested-item">
+                  <i data-lucide="users"></i>
+                  <span>주소 등록</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -113,8 +154,8 @@
         </div>
       </header>
 
-      <!-- View 1: Dashboard Home / Overview (VPCs & Security Groups) -->
-      <section id="view-dashboard" class="content-view active">
+      <!-- View 1: SG Manage - Dashboard (VPCs & Security Groups) -->
+      <section id="view-sg-dashboard" class="content-view active">
         <div class="view-header" style="margin-bottom: 20px;">
           <div>
             <h2>VPCs & Security Groups Operator</h2>
@@ -304,8 +345,8 @@
         </div>
       </section>
 
-      <!-- View 3: Audit Logs -->
-      <section id="view-logs" class="content-view">
+      <!-- View 2: SG Manage - Logs (Audit Logs) -->
+      <section id="view-sg-logs" class="content-view">
         <div class="view-header">
           <div>
             <h2>Audit Logs</h2>
@@ -335,8 +376,8 @@
         </div>
       </section>
 
-      <!-- View 4: Backup Status Monitor -->
-      <section id="view-backups" class="content-view">
+      <!-- View 3: Backup Monitor - Dashboard -->
+      <section id="view-backup-dashboard" class="content-view">
         <div class="view-header">
           <div>
             <h2>AWS Backup Status Monitor</h2>
@@ -469,8 +510,8 @@
         </div>
       </section>
 
-      <!-- View 5: Slack Webhook Management -->
-      <section id="view-slack-webhook" class="content-view">
+      <!-- View 4: Backup Monitor - Notification > Slack > 웹훅 -->
+      <section id="view-noti-slack-webhook" class="content-view">
         <div class="view-header" style="margin-bottom: 20px;">
           <div>
             <h2>Slack Webhook Management</h2>
@@ -503,8 +544,6 @@
           </table>
         </div>
 
-
-
         <div style="display: flex; gap: 12px; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px 24px;">
           <span id="slack-webhook-last-sent-time" style="font-size: 0.8rem; color: var(--text-muted);">최근 전송: 없음</span>
           <button id="btn-test-all-webhooks" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px;">
@@ -514,8 +553,8 @@
         </div>
       </section>
 
-      <!-- View 6: Slack Email Management -->
-      <section id="view-slack-email" class="content-view">
+      <!-- View 5: Backup Monitor - Notification > Slack > Email -->
+      <section id="view-noti-slack-email" class="content-view">
         <div class="view-header" style="margin-bottom: 20px;">
           <div>
             <h2>Slack Channel Email Management</h2>
@@ -553,7 +592,7 @@
               <option value="report" selected>report (리포트: HTML/Plain 텍스트 리포트)</option>
               <option value="summary">summary (요약: 제목 및 정상/실패 개수)</option>
               <option value="preview">preview (미리보기: 제목 + 상태 + 일시)</option>
-              <option value="full">full (전체: 제목 + 전체 리포트)</option>
+              <option value="full">full (전체: 모든 계정별 EBS/EFS/RDS 리스팅 + 종합 리포트)</option>
             </select>
             <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
               이메일 알림 메시지의 형식을 선택하세요.
@@ -601,6 +640,127 @@
         </div>
       </section>
 
+      <!-- View 6: Backup Monitor - Notification > Email > SMTP -->
+      <section id="view-noti-email-smtp" class="content-view">
+        <div class="view-header" style="margin-bottom: 20px;">
+          <div>
+            <h2>Email SMTP Server Configuration</h2>
+            <p>사내 메일 서버 또는 AWS SES SMTP 엔드포인트 연동 정보 설정 및 전송 연결 테스트</p>
+          </div>
+        </div>
+
+        <div class="slack-config-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; max-width: 720px; box-shadow: var(--shadow-sm);">
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px;">
+            <div class="form-group">
+              <label for="smtp-host" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+                SMTP 호스트 (Host) <span class="required" style="color: var(--danger);">*</span>
+              </label>
+              <input type="text" id="smtp-host" placeholder="email-smtp.ap-northeast-2.amazonaws.com" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+            </div>
+            <div class="form-group">
+              <label for="smtp-port" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+                포트 (Port) <span class="required" style="color: var(--danger);">*</span>
+              </label>
+              <input type="number" id="smtp-port" placeholder="587" value="587" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="smtp-encryption" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              암호화 프로토콜 (Security)
+            </label>
+            <select id="smtp-encryption" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-size: 0.85rem;">
+              <option value="STARTTLS" selected>STARTTLS (Port 587 권장)</option>
+              <option value="SSL/TLS">SSL / TLS (Port 465)</option>
+              <option value="NONE">None (보안 없음 - Port 25)</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+            <div class="form-group">
+              <label for="smtp-username" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+                SMTP 인증 사용자 (Username)
+              </label>
+              <input type="text" id="smtp-username" placeholder="SMTP 사용자명 또는 IAM Access Key" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+            </div>
+            <div class="form-group">
+              <label for="smtp-password" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+                SMTP 비밀번호 (Password)
+              </label>
+              <input type="password" id="smtp-password" placeholder="••••••••••••••••" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="smtp-from-email" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              기본 발신자 주소 (From Email Address) <span class="required" style="color: var(--danger);">*</span>
+            </label>
+            <input type="email" id="smtp-from-email" placeholder="backup-noreply@company.com" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+          </div>
+
+          <div class="form-group" style="margin-bottom: 24px;">
+            <label for="smtp-from-name" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
+              발신자 표시 이름 (Sender Name)
+            </label>
+            <input type="text" id="smtp-from-name" placeholder="AWS Backup Monitor System" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-size: 0.85rem;" />
+          </div>
+
+          <div style="display: flex; gap: 12px; justify-content: flex-end; align-items: center; border-top: 1px solid var(--border-color); padding-top: 20px;">
+            <span id="smtp-status-msg" style="font-size: 0.8rem; color: var(--text-muted); margin-right: auto;">연결 상태: 대기 중</span>
+            <button id="btn-test-smtp" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="activity" style="width: 14px; height: 14px;"></i>
+              <span>SMTP 연결 테스트</span>
+            </button>
+            <button id="btn-save-smtp" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="save" style="width: 14px; height: 14px;"></i>
+              <span>SMTP 설정 저장</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 7: Backup Monitor - Notification > Email > 주소 등록 -->
+      <section id="view-noti-email-recipients" class="content-view">
+        <div class="view-header" style="margin-bottom: 20px;">
+          <div>
+            <h2>Email Recipients Directory</h2>
+            <p>일일 백업 모니터링 종합 보고서를 수신할 담당자 및 부서/그룹 이메일 주소록 관리</p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button id="btn-open-add-recipient" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
+              <span>새 수신자 등록</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Recipients Table Wrapper -->
+        <div class="logs-table-wrapper" style="margin-bottom: 20px;">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th style="width: 20%;">이름 / 담당자</th>
+                <th style="width: 30%;">이메일 주소</th>
+                <th style="width: 20%;">소속 부서 / 그룹</th>
+                <th style="width: 15%;">수신 상태</th>
+                <th style="width: 15%;">작업</th>
+              </tr>
+            </thead>
+            <tbody id="table-body-recipients">
+              <!-- Dynamic Recipient Rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px 24px;">
+          <span id="recipients-summary-text" style="font-size: 0.8rem; color: var(--text-muted);">총 수신자: 0명 (활성: 0명)</span>
+          <button id="btn-test-send-recipients" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="send" style="width: 14px; height: 14px;"></i>
+            <span>활성 수신자 전체 테스트 발송</span>
+          </button>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -627,7 +787,7 @@
             <option value="summary" selected>summary (요약: 줄바꿈 없이 제목만 전송)</option>
             <option value="report">report (리포트: 본문 텍스트 전체)</option>
             <option value="preview">preview (미리보기: 제목 + 상태 + 일시)</option>
-            <option value="full">full (전체: 제목 + 본문 텍스트 전체)</option>
+            <option value="full">full (전체: 모든 계정별 EBS/EFS/RDS 리스팅 + 종합 리포트)</option>
           </select>
         </div>
         <div class="form-group">
@@ -655,6 +815,42 @@
       <div class="modal-footer">
         <button id="btn-cancel-webhook-modal" class="btn btn-secondary">취소</button>
         <button id="btn-save-webhook-modal" class="btn btn-primary">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Email Recipient Add / Edit -->
+  <div id="modal-recipient" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 id="modal-recipient-title">수신자 등록</h3>
+        <button id="btn-close-recipient-modal" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="recipient-modal-id" value="" />
+        <div class="form-group">
+          <label for="recipient-modal-name">담당자 이름 <span class="required">*</span></label>
+          <input type="text" id="recipient-modal-name" placeholder="예: 홍길동 매니저" required />
+        </div>
+        <div class="form-group">
+          <label for="recipient-modal-email">이메일 주소 <span class="required">*</span></label>
+          <input type="email" id="recipient-modal-email" placeholder="gildong.hong@company.com" required style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+        </div>
+        <div class="form-group">
+          <label for="recipient-modal-dept">소속 부서 / 그룹</label>
+          <input type="text" id="recipient-modal-dept" placeholder="예: 클라우드인프라팀 / 백화점BO" />
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+          <span style="font-weight: 600; font-size: 0.88rem;">수신 활성화</span>
+          <label class="switch-toggle" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+            <input type="checkbox" id="recipient-modal-enabled" checked style="opacity: 0; width: 0; height: 0;">
+            <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .3s; border-radius: 24px;"></span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-recipient-modal" class="btn btn-secondary">취소</button>
+        <button id="btn-save-recipient-modal" class="btn btn-primary">저장</button>
       </div>
     </div>
   </div>

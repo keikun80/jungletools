@@ -62,9 +62,73 @@ function filterReportByMessageType(reportData, type) {
       dateFormatted: reportData.dateFormatted,
       dateOnlyFormatted: reportData.dateOnlyFormatted
     };
+  } else if (type === "full") {
+    return {
+      type: "full",
+      subject: reportData.subject,
+      report: reportData.fullTextBody || reportData.plainTextBody,
+      totalHealthy: reportData.totalHealthy,
+      totalFailure: reportData.totalFailure,
+      nonUnprotectedTotal: reportData.nonUnprotectedTotal,
+      accountReports: reportData.accountReports
+    };
   } else {
     return reportData;
   }
+}
+
+function generateFullTextBody(reportData, accountReports) {
+  const { fullDateFormatted, totalHealthy, totalFailure, nonUnprotectedTotal, totalUnprotected } = reportData;
+  const healthPercent = nonUnprotectedTotal > 0 ? Math.round((totalHealthy / nonUnprotectedTotal) * 100) : 100;
+  
+  let out = `📊 백화점BO 백업 모니터링 종합 리포트\n`;
+  out += `기준 일시: ${fullDateFormatted}\n\n`;
+  out += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  out += `[📌 전체 종합 현황]\n`;
+  out += `• 전체 모니터링: ${totalHealthy} / ${nonUnprotectedTotal} (${healthPercent}% 정상)\n`;
+  out += `• Success: ${totalHealthy}개  |  Error: ${totalFailure}개  |  Unprotected: ${totalUnprotected}개\n`;
+  out += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  out += `[🏢 계정별 백업 현황 (${accountReports.length}개 계정)]\n\n`;
+
+  accountReports.forEach((acc, idx) => {
+    const accHealthy = acc.ebs.healthy + acc.efs.healthy + acc.rds.healthy;
+    const accFailure = acc.ebs.failure + acc.efs.failure + acc.rds.failure;
+    const accTotal = accHealthy + accFailure;
+    const isAccHealthy = accFailure === 0;
+
+    out += `${idx + 1}. ${acc.name} [${acc.id}] ${isAccHealthy ? "" : "⚠️ 확인 필요"}\n`;
+    out += `   • 상태: ${isAccHealthy ? `정상 (Healthy: ${accHealthy} / ${accTotal})` : `${accFailure}건 실패 (Healthy: ${accHealthy} / ${accTotal})`}\n`;
+
+    const parts = [];
+    if (acc.ebs.healthy + acc.ebs.failure > 0) {
+      parts.push(`EBS: ${acc.ebs.healthy}개 정상${acc.ebs.failure > 0 ? `, ${acc.ebs.failure}개 실패 ❌` : ""}`);
+    } else {
+      parts.push(`EBS: -`);
+    }
+    if (acc.efs.healthy + acc.efs.failure > 0) {
+      parts.push(`EFS: ${acc.efs.healthy}개 정상${acc.efs.failure > 0 ? `, ${acc.efs.failure}개 실패 ❌` : ""}`);
+    } else {
+      parts.push(`EFS: -`);
+    }
+    if (acc.rds.healthy + acc.rds.failure > 0) {
+      parts.push(`RDS: ${acc.rds.healthy}개 정상${acc.rds.failure > 0 ? `, ${acc.rds.failure}개 실패 ❌` : ""}`);
+    } else {
+      parts.push(`RDS: -`);
+    }
+    out += `   • ${parts.join("  |  ")}\n`;
+
+    const failures = (acc.items || []).filter(item => item.status === "Failure");
+    if (failures.length > 0) {
+      failures.forEach(f => {
+        out += `     - [${f.service}] ${f.name}: ${f.detail || "스냅샷 실패"}\n`;
+      });
+    }
+    out += `\n`;
+  });
+
+  out += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  out += `* 자세한 사항은 Jungle Tools Console 대시보드에서 확인하세요.`;
+  return out;
 }
 
 
@@ -548,7 +612,7 @@ export const handler = async (event) => {
 
     const summaryText = subjectText;
 
-    const reportData = {
+    const baseReportData = {
       summary: summaryText,
       subject: subjectText,
       backupStatusText,
@@ -560,7 +624,14 @@ export const handler = async (event) => {
       nonUnprotectedTotal,
       htmlBody,
       plainTextBody,
+      accountReports,
       cachedAt: now.toISOString()
+    };
+
+    const fullTextBody = generateFullTextBody(baseReportData, accountReports);
+    const reportData = {
+      ...baseReportData,
+      fullTextBody
     };
 
 
@@ -650,8 +721,8 @@ export const handler = async (event) => {
               textPayload = plainTextBody;
             } else if (whType === "preview") {
               textPayload = `*${subjectText}*\n상태: ${backupStatusText} (${fullDateFormatted})`;
-            } else {
-              textPayload = `*${subjectText}*\n\n${plainTextBody}`;
+            } else { // full or default
+              textPayload = `*${subjectText}*\n\n${fullTextBody}`;
             }
 
             const slackRes = await fetch(wh.url.trim(), {

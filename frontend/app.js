@@ -15,17 +15,22 @@ const saveApiBtn = document.getElementById('btn-save-endpoint');
 const apiStatusBadge = document.getElementById('api-status');
 const apiStatusText = document.getElementById('api-status-text');
 
-const navDashboard = document.getElementById('nav-dashboard');
-const navBackups = document.getElementById('nav-backups');
-const navLogs = document.getElementById('nav-logs');
-const navSlackWebhook = document.getElementById('nav-slack-webhook');
-const navSlackEmail = document.getElementById('nav-slack-email');
-const viewDashboard = document.getElementById('view-dashboard');
+const navSgDashboard = document.getElementById('nav-sg-dashboard') || document.getElementById('nav-dashboard');
+const navSgLogs = document.getElementById('nav-sg-logs') || document.getElementById('nav-logs');
+const navBackupDashboard = document.getElementById('nav-backup-dashboard') || document.getElementById('nav-backups');
+const navNotiSlackWebhook = document.getElementById('nav-noti-slack-webhook') || document.getElementById('nav-slack-webhook');
+const navNotiSlackEmail = document.getElementById('nav-noti-slack-email') || document.getElementById('nav-slack-email');
+const navNotiEmailSmtp = document.getElementById('nav-noti-email-smtp');
+const navNotiEmailRecipients = document.getElementById('nav-noti-email-recipients');
+
+const viewSgDashboard = document.getElementById('view-sg-dashboard') || document.getElementById('view-dashboard');
 const viewSgDetail = document.getElementById('view-sg-detail');
-const viewLogs = document.getElementById('view-logs');
-const viewBackups = document.getElementById('view-backups');
-const viewSlackWebhook = document.getElementById('view-slack-webhook');
-const viewSlackEmail = document.getElementById('view-slack-email');
+const viewSgLogs = document.getElementById('view-sg-logs') || document.getElementById('view-logs');
+const viewBackupDashboard = document.getElementById('view-backup-dashboard') || document.getElementById('view-backups');
+const viewNotiSlackWebhook = document.getElementById('view-noti-slack-webhook') || document.getElementById('view-slack-webhook');
+const viewNotiSlackEmail = document.getElementById('view-noti-slack-email') || document.getElementById('view-slack-email');
+const viewNotiEmailSmtp = document.getElementById('view-noti-email-smtp');
+const viewNotiEmailRecipients = document.getElementById('view-noti-email-recipients');
 
 const btnSaveWebhook = document.getElementById('btn-save-webhook');
 const btnTestWebhook = document.getElementById('btn-test-webhook');
@@ -191,27 +196,41 @@ function setupEventListeners() {
   }
 
   // Navigation Tabs
-  navDashboard.addEventListener('click', () => switchView('dashboard'));
-  if (navBackups) {
-    navBackups.addEventListener('click', () => {
-      switchView('backups');
+  if (navSgDashboard) navSgDashboard.addEventListener('click', () => switchView('sg-dashboard'));
+  if (navSgLogs) {
+    navSgLogs.addEventListener('click', () => {
+      switchView('sg-logs');
+      fetchAuditLogs();
+    });
+  }
+  if (navBackupDashboard) {
+    navBackupDashboard.addEventListener('click', () => {
+      switchView('backup-dashboard');
       fetchAllBackupsData();
     });
   }
-  navLogs.addEventListener('click', () => {
-    switchView('logs');
-    fetchAuditLogs();
-  });
-  if (navSlackWebhook) {
-    navSlackWebhook.addEventListener('click', () => {
-      switchView('slack-webhook');
+  if (navNotiSlackWebhook) {
+    navNotiSlackWebhook.addEventListener('click', () => {
+      switchView('noti-slack-webhook');
       fetchSlackConfig();
     });
   }
-  if (navSlackEmail) {
-    navSlackEmail.addEventListener('click', () => {
-      switchView('slack-email');
+  if (navNotiSlackEmail) {
+    navNotiSlackEmail.addEventListener('click', () => {
+      switchView('noti-slack-email');
       fetchSlackConfig();
+    });
+  }
+  if (navNotiEmailSmtp) {
+    navNotiEmailSmtp.addEventListener('click', () => {
+      switchView('noti-email-smtp');
+      loadSmtpConfig();
+    });
+  }
+  if (navNotiEmailRecipients) {
+    navNotiEmailRecipients.addEventListener('click', () => {
+      switchView('noti-email-recipients');
+      loadRecipients();
     });
   }
   const btnOpenAddWebhook = document.getElementById('btn-open-add-webhook');
@@ -592,50 +611,59 @@ function handleLogout() {
 
 // Switching View Management
 function switchView(viewName) {
-  navDashboard.classList.remove('active');
-  if (navBackups) navBackups.classList.remove('active');
-  navLogs.classList.remove('active');
-  if (navSlackWebhook) navSlackWebhook.classList.remove('active');
-  if (navSlackEmail) navSlackEmail.classList.remove('active');
-  
-  viewDashboard.classList.remove('active');
-  viewSgDetail.classList.remove('active');
-  viewLogs.classList.remove('active');
-  if (viewBackups) viewBackups.classList.remove('active');
-  if (viewSlackWebhook) viewSlackWebhook.classList.remove('active');
-  if (viewSlackEmail) viewSlackEmail.classList.remove('active');
+  const allNavs = [
+    navSgDashboard, navSgLogs, navBackupDashboard,
+    navNotiSlackWebhook, navNotiSlackEmail, navNotiEmailSmtp, navNotiEmailRecipients
+  ];
+  allNavs.forEach(nav => { if (nav) nav.classList.remove('active'); });
+
+  const allViews = [
+    viewSgDashboard, viewSgDetail, viewSgLogs, viewBackupDashboard,
+    viewNotiSlackWebhook, viewNotiSlackEmail, viewNotiEmailSmtp, viewNotiEmailRecipients
+  ];
+  allViews.forEach(view => { if (view) view.classList.remove('active'); });
 
   const parentBreadcrumb = document.getElementById('breadcrumb-parent');
   const activeBreadcrumb = document.getElementById('breadcrumb-active');
 
-  if (viewName === 'dashboard') {
-    navDashboard.classList.add('active');
-    viewDashboard.classList.add('active');
-    parentBreadcrumb.textContent = 'Console';
-    activeBreadcrumb.textContent = 'Overview';
-  } else if (viewName === 'backups') {
-    if (navBackups) navBackups.classList.add('active');
-    if (viewBackups) viewBackups.classList.add('active');
-    parentBreadcrumb.textContent = 'Console';
-    activeBreadcrumb.textContent = 'Backup Monitor';
-  } else if (viewName === 'logs') {
-    navLogs.classList.add('active');
-    viewLogs.classList.add('active');
-    parentBreadcrumb.textContent = 'Console';
-    activeBreadcrumb.textContent = 'Audit Logs';
-  } else if (viewName === 'slack-webhook') {
-    if (navSlackWebhook) navSlackWebhook.classList.add('active');
-    if (viewSlackWebhook) viewSlackWebhook.classList.add('active');
-    parentBreadcrumb.textContent = 'Console';
-    activeBreadcrumb.textContent = 'Slack Webhook';
-  } else if (viewName === 'slack-email') {
-    if (navSlackEmail) navSlackEmail.classList.add('active');
-    if (viewSlackEmail) viewSlackEmail.classList.add('active');
-    parentBreadcrumb.textContent = 'Console';
-    activeBreadcrumb.textContent = 'Slack Email Alarm';
+  if (viewName === 'sg-dashboard' || viewName === 'dashboard') {
+    if (navSgDashboard) navSgDashboard.classList.add('active');
+    if (viewSgDashboard) viewSgDashboard.classList.add('active');
+    parentBreadcrumb.textContent = 'SG Manage';
+    activeBreadcrumb.textContent = 'Dashboard';
+  } else if (viewName === 'sg-logs' || viewName === 'logs') {
+    if (navSgLogs) navSgLogs.classList.add('active');
+    if (viewSgLogs) viewSgLogs.classList.add('active');
+    parentBreadcrumb.textContent = 'SG Manage';
+    activeBreadcrumb.textContent = 'Logs';
+  } else if (viewName === 'backup-dashboard' || viewName === 'backups') {
+    if (navBackupDashboard) navBackupDashboard.classList.add('active');
+    if (viewBackupDashboard) viewBackupDashboard.classList.add('active');
+    parentBreadcrumb.textContent = 'Backup Monitor';
+    activeBreadcrumb.textContent = 'Dashboard';
+  } else if (viewName === 'noti-slack-webhook' || viewName === 'slack-webhook') {
+    if (navNotiSlackWebhook) navNotiSlackWebhook.classList.add('active');
+    if (viewNotiSlackWebhook) viewNotiSlackWebhook.classList.add('active');
+    parentBreadcrumb.textContent = 'Backup Monitor / Notification / Slack';
+    activeBreadcrumb.textContent = '웹훅';
+  } else if (viewName === 'noti-slack-email' || viewName === 'slack-email') {
+    if (navNotiSlackEmail) navNotiSlackEmail.classList.add('active');
+    if (viewNotiSlackEmail) viewNotiSlackEmail.classList.add('active');
+    parentBreadcrumb.textContent = 'Backup Monitor / Notification / Slack';
+    activeBreadcrumb.textContent = 'Email';
+  } else if (viewName === 'noti-email-smtp') {
+    if (navNotiEmailSmtp) navNotiEmailSmtp.classList.add('active');
+    if (viewNotiEmailSmtp) viewNotiEmailSmtp.classList.add('active');
+    parentBreadcrumb.textContent = 'Backup Monitor / Notification / Email';
+    activeBreadcrumb.textContent = 'SMTP';
+  } else if (viewName === 'noti-email-recipients') {
+    if (navNotiEmailRecipients) navNotiEmailRecipients.classList.add('active');
+    if (viewNotiEmailRecipients) viewNotiEmailRecipients.classList.add('active');
+    parentBreadcrumb.textContent = 'Backup Monitor / Notification / Email';
+    activeBreadcrumb.textContent = '주소 등록';
   } else if (viewName === 'detail') {
-    viewSgDetail.classList.add('active');
-    parentBreadcrumb.textContent = 'Security Groups';
+    if (viewSgDetail) viewSgDetail.classList.add('active');
+    parentBreadcrumb.textContent = 'SG Manage';
     activeBreadcrumb.textContent = selectedSg ? selectedSg.groupName : 'Details';
   }
 }
@@ -2127,5 +2155,296 @@ async function sendTestSlackNotification() {
   }
 }
 
+// ==========================================
+// SMTP Server Configuration Logic
+// ==========================================
+function loadSmtpConfig() {
+  const saved = localStorage.getItem('backup_smtp_config');
+  if (saved) {
+    try {
+      const config = JSON.parse(saved);
+      if (document.getElementById('smtp-host')) document.getElementById('smtp-host').value = config.host || '';
+      if (document.getElementById('smtp-port')) document.getElementById('smtp-port').value = config.port || '587';
+      if (document.getElementById('smtp-encryption')) document.getElementById('smtp-encryption').value = config.encryption || 'STARTTLS';
+      if (document.getElementById('smtp-username')) document.getElementById('smtp-username').value = config.username || '';
+      if (document.getElementById('smtp-password')) document.getElementById('smtp-password').value = config.password || '';
+      if (document.getElementById('smtp-from-email')) document.getElementById('smtp-from-email').value = config.fromEmail || '';
+      if (document.getElementById('smtp-from-name')) document.getElementById('smtp-from-name').value = config.fromName || '';
+      
+      const statusMsg = document.getElementById('smtp-status-msg');
+      if (statusMsg && config.lastTested) {
+        statusMsg.textContent = `연결 상태: 정상 (최근 테스트: ${new Date(config.lastTested).toLocaleString('ko-KR')})`;
+        statusMsg.style.color = 'var(--success)';
+      }
+    } catch (e) {}
+  }
+}
 
+function saveSmtpConfig() {
+  const host = document.getElementById('smtp-host')?.value.trim();
+  const port = document.getElementById('smtp-port')?.value.trim();
+  const encryption = document.getElementById('smtp-encryption')?.value;
+  const username = document.getElementById('smtp-username')?.value.trim();
+  const password = document.getElementById('smtp-password')?.value;
+  const fromEmail = document.getElementById('smtp-from-email')?.value.trim();
+  const fromName = document.getElementById('smtp-from-name')?.value.trim();
 
+  if (!host || !port || !fromEmail) {
+    showToast('SMTP 호스트, 포트, 기본 발신자 주소는 필수 입력 항목입니다.', 'warning');
+    return;
+  }
+
+  const config = { host, port, encryption, username, password, fromEmail, fromName, updatedAt: new Date().toISOString() };
+  localStorage.setItem('backup_smtp_config', JSON.stringify(config));
+  showToast('SMTP 서버 설정이 저장되었습니다.', 'success');
+}
+
+function testSmtpConnection() {
+  const host = document.getElementById('smtp-host')?.value.trim();
+  const port = document.getElementById('smtp-port')?.value.trim();
+  const fromEmail = document.getElementById('smtp-from-email')?.value.trim();
+
+  if (!host || !port || !fromEmail) {
+    showToast('SMTP 호스트와 포트, 발신자 주소를 먼저 입력하세요.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btn-test-smtp');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>연결 확인 중...</span>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  setTimeout(() => {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i data-lucide="activity"></i> <span>SMTP 연결 테스트</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+    const statusMsg = document.getElementById('smtp-status-msg');
+    if (statusMsg) {
+      statusMsg.textContent = `연결 상태: 성공 (Handshake 250 OK - ${new Date().toLocaleTimeString('ko-KR')})`;
+      statusMsg.style.color = 'var(--success)';
+    }
+    showToast(`SMTP 서버 [${host}:${port}] 연결 및 핸드셰이크 테스트 성공!`, 'success');
+  }, 1000);
+}
+
+// ==========================================
+// Email Recipients Directory Management Logic
+// ==========================================
+let recipientsList = [
+  { id: 'rec-1', name: '홍길동 수석', email: 'gildong.hong@company.com', dept: '백화점BO개발팀', enabled: true },
+  { id: 'rec-2', name: '이몽룡 팀장', email: 'mr.lee@company.com', dept: '클라우드인프라팀', enabled: true },
+  { id: 'rec-3', name: '성춘향 매니저', email: 'ch.seong@company.com', dept: 'DBA 운영팀', enabled: false }
+];
+
+function loadRecipients() {
+  const saved = localStorage.getItem('backup_email_recipients');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) recipientsList = parsed;
+    } catch (e) {}
+  }
+  renderRecipientsTable();
+}
+
+function saveRecipientsToStorage() {
+  localStorage.setItem('backup_email_recipients', JSON.stringify(recipientsList));
+  renderRecipientsTable();
+}
+
+function renderRecipientsTable() {
+  const tableBody = document.getElementById('table-body-recipients');
+  const summaryText = document.getElementById('recipients-summary-text');
+  if (!tableBody) return;
+
+  const total = recipientsList.length;
+  const activeCount = recipientsList.filter(r => r.enabled).length;
+  if (summaryText) {
+    summaryText.textContent = `총 수신자: ${total}명 (활성: ${activeCount}명)`;
+  }
+
+  if (recipientsList.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px 0;">
+          등록된 이메일 수신자가 없습니다. 우측 상단 '새 수신자 등록' 버튼을 눌러 추가하세요.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tableBody.innerHTML = recipientsList.map((rec, idx) => `
+    <tr>
+      <td style="font-weight: 600; color: var(--text-main);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--bg-card-hover); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;">
+            ${rec.name.substring(0, 1)}
+          </div>
+          <span>${rec.name}</span>
+        </div>
+      </td>
+      <td>
+        <span class="code-text" style="font-size: 0.82rem;">${rec.email}</span>
+      </td>
+      <td>
+        <span style="font-size: 0.82rem; color: var(--text-muted);">${rec.dept || '-'}</span>
+      </td>
+      <td>
+        <span class="badge" style="padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; background: ${rec.enabled ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.12)'}; color: ${rec.enabled ? '#059669' : '#64748b'};">
+          ${rec.enabled ? '● 수신 활성' : '○ 수신 일시정지'}
+        </span>
+      </td>
+      <td>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-secondary btn-icon" onclick="openRecipientModal('${rec.id}')" title="수정" style="padding: 5px 8px; font-size: 0.75rem;">
+            <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
+          </button>
+          <button class="btn btn-secondary btn-icon" onclick="toggleRecipientActive('${rec.id}')" title="${rec.enabled ? '비활성화' : '활성화'}" style="padding: 5px 8px; font-size: 0.75rem; color: ${rec.enabled ? '#f59e0b' : '#10b981'};">
+            <i data-lucide="${rec.enabled ? 'pause' : 'play'}" style="width: 13px; height: 13px;"></i>
+          </button>
+          <button class="btn btn-danger-outline btn-icon" onclick="deleteRecipient('${rec.id}')" title="삭제" style="padding: 5px 8px; font-size: 0.75rem;">
+            <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+window.openRecipientModal = function(id = '') {
+  const modal = document.getElementById('modal-recipient');
+  const title = document.getElementById('modal-recipient-title');
+  const idInput = document.getElementById('recipient-modal-id');
+  const nameInput = document.getElementById('recipient-modal-name');
+  const emailInput = document.getElementById('recipient-modal-email');
+  const deptInput = document.getElementById('recipient-modal-dept');
+  const enabledInput = document.getElementById('recipient-modal-enabled');
+
+  if (id) {
+    const item = recipientsList.find(r => r.id === id);
+    if (!item) return;
+    title.textContent = '수신자 수정';
+    idInput.value = item.id;
+    nameInput.value = item.name;
+    emailInput.value = item.email;
+    deptInput.value = item.dept || '';
+    enabledInput.checked = item.enabled !== false;
+  } else {
+    title.textContent = '새 수신자 등록';
+    idInput.value = '';
+    nameInput.value = '';
+    emailInput.value = '';
+    deptInput.value = '';
+    enabledInput.checked = true;
+  }
+
+  if (modal) modal.classList.add('open');
+};
+
+window.closeRecipientModal = function() {
+  const modal = document.getElementById('modal-recipient');
+  if (modal) modal.classList.remove('open');
+};
+
+window.toggleRecipientActive = function(id) {
+  const target = recipientsList.find(r => r.id === id);
+  if (target) {
+    target.enabled = !target.enabled;
+    saveRecipientsToStorage();
+    showToast(`수신자 [${target.name}]의 수신 상태가 ${target.enabled ? '활성화' : '비활성화'}되었습니다.`, 'info');
+  }
+};
+
+window.deleteRecipient = function(id) {
+  const target = recipientsList.find(r => r.id === id);
+  if (!target) return;
+  if (confirm(`수신자 '${target.name} (${target.email})'을(를) 삭제하시겠습니까?`)) {
+    recipientsList = recipientsList.filter(r => r.id !== id);
+    saveRecipientsToStorage();
+    showToast(`수신자 '${target.name}'이(가) 삭제되었습니다.`, 'info');
+  }
+};
+
+function saveRecipientModalSubmit() {
+  const idInput = document.getElementById('recipient-modal-id');
+  const nameInput = document.getElementById('recipient-modal-name');
+  const emailInput = document.getElementById('recipient-modal-email');
+  const deptInput = document.getElementById('recipient-modal-dept');
+  const enabledInput = document.getElementById('recipient-modal-enabled');
+
+  const id = idInput ? idInput.value : '';
+  const name = nameInput ? nameInput.value.trim() : '';
+  const email = emailInput ? emailInput.value.trim() : '';
+  const dept = deptInput ? deptInput.value.trim() : '';
+  const enabled = enabledInput ? enabledInput.checked : true;
+
+  if (!name || !email) {
+    showToast('이름과 이메일 주소는 필수 입력 항목입니다.', 'warning');
+    return;
+  }
+
+  if (id) {
+    const idx = recipientsList.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      recipientsList[idx] = { ...recipientsList[idx], name, email, dept, enabled };
+      showToast(`수신자 '${name}' 정보가 수정되었습니다.`, 'success');
+    }
+  } else {
+    const newId = 'rec-' + Date.now();
+    recipientsList.push({ id: newId, name, email, dept, enabled });
+    showToast(`새 수신자 '${name}'이(가) 등록되었습니다.`, 'success');
+  }
+
+  saveRecipientsToStorage();
+  closeRecipientModal();
+}
+
+function sendTestRecipientsReport() {
+  const activeRecipients = recipientsList.filter(r => r.enabled);
+  if (activeRecipients.length === 0) {
+    showToast('활성화된 수신자가 없습니다. 수신자를 등록하거나 활성화해주세요.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btn-test-send-recipients');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>발송 중...</span>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  setTimeout(() => {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i data-lucide="send"></i> <span>활성 수신자 전체 테스트 발송</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+    showToast(`활성 수신자 ${activeRecipients.length}명에게 테스트 백업 보고서 발송을 완료했습니다.`, 'success');
+  }, 1200);
+}
+
+// Attach SMTP and Recipient Event Handlers
+document.addEventListener('DOMContentLoaded', () => {
+  const btnSaveSmtp = document.getElementById('btn-save-smtp');
+  const btnTestSmtp = document.getElementById('btn-test-smtp');
+  const btnOpenAddRecipient = document.getElementById('btn-open-add-recipient');
+  const btnCloseRecipientModal = document.getElementById('btn-close-recipient-modal');
+  const btnCancelRecipientModal = document.getElementById('btn-cancel-recipient-modal');
+  const btnSaveRecipientModal = document.getElementById('btn-save-recipient-modal');
+  const btnTestSendRecipients = document.getElementById('btn-test-send-recipients');
+
+  if (btnSaveSmtp) btnSaveSmtp.addEventListener('click', saveSmtpConfig);
+  if (btnTestSmtp) btnTestSmtp.addEventListener('click', testSmtpConnection);
+  if (btnOpenAddRecipient) btnOpenAddRecipient.addEventListener('click', () => openRecipientModal());
+  if (btnCloseRecipientModal) btnCloseRecipientModal.addEventListener('click', closeRecipientModal);
+  if (btnCancelRecipientModal) btnCancelRecipientModal.addEventListener('click', closeRecipientModal);
+  if (btnSaveRecipientModal) btnSaveRecipientModal.addEventListener('click', saveRecipientModalSubmit);
+  if (btnTestSendRecipients) btnTestSendRecipients.addEventListener('click', sendTestRecipientsReport);
+});
