@@ -155,6 +155,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   setupEventListeners();
+  switchView('sg-dashboard');
 });
 
 // Event Listeners Setup
