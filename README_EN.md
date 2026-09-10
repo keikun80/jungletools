@@ -146,7 +146,7 @@ Example `env.json`:
 ```json
 {
   "HUB_ACCOUNT_ID": "123456789012",
-  "HUB_PROFILE": "l-iam-s2",
+  "HUB_PROFILE": "hub-profile",
   "REGION": "ap-northeast-2",
   "SPOKE_PROFILES": [
     { "profile": "l-ellotte-dev", "accountId": "515303172277" },

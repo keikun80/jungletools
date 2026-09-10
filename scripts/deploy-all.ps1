@@ -2,7 +2,7 @@
 # Usage: .\scripts\deploy-all.ps1 [-Profile <PROFILE_NAME>] [-Region <REGION>]
 
 param(
-    [string]$Profile = "l-iam-s2",
+    [string]$Profile = "hub-profile",
     [string]$Region = "ap-northeast-2"
 )
 

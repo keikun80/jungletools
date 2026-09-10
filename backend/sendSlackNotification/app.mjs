@@ -11,7 +11,7 @@ const docClient = DynamoDBDocumentClient.from(ddbClient);
 const SLACK_CONFIG_TABLE = process.env.SLACK_CONFIG_TABLE || "SlackConfig";
 
 const DEFAULT_SCAN_TARGET_ACCOUNTS = [
-  { id: "132949884230", name: "Hub (l-iam-s2)" },
+  { id: "123456789012", name: "Hub (hub-profile)" },
   { id: "515303172277", name: "l-ellotte-dev", roleArn: "arn:aws:iam::515303172277:role/JungleToolsCrossAccountRole" },
   { id: "087518667058", name: "l-b2-dev", roleArn: "arn:aws:iam::087518667058:role/JungleToolsCrossAccountRole" },
   { id: "755611797885", name: "l-cicd-s2", roleArn: "arn:aws:iam::755611797885:role/JungleToolsCrossAccountRole" },

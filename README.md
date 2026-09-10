@@ -77,7 +77,7 @@ flowchart TB
         SlackBot["🤖 Slack Bot / Webhook Consumer"]
     end
 
-    subgraph HubAccount ["Hub Account (132949884230 / l-iam-s2)"]
+    subgraph HubAccount ["Hub Account (123456789012 / hub-profile)"]
         S3["🪣 S3 Bucket<br/>(Static Website Hosting)"]
         APIGW["⚡ API Gateway v2<br/>(HTTP API with IAM Auth)"]
         
@@ -167,7 +167,7 @@ aws_backup_monitor_2/
 
 ### 1. 사전 준비 (Prerequisites)
 * **Node.js (v20.x 이상)** & **npm**
-* **AWS CLI (v2.x 이상)**: `~/.aws/credentials`에 Hub 프로필(`l-iam-s2`) 및 Spoke 프로필 등록
+* **AWS CLI (v2.x 이상)**: `~/.aws/credentials`에 Hub 프로필(`hub-profile`) 및 Spoke 프로필 등록
 * **AWS SAM CLI (v1.100 이상)**: 백엔드 빌드 및 배포용
 
 ### 2. Spoke 계정 Cross-Account Role 배포
@@ -186,10 +186,10 @@ Hub 계정에 백엔드 SAM 스택과 프론트엔드 정적 웹사이트를 한
 ```bash
 # Linux / macOS
 chmod +x ./scripts/deploy-all.sh
-./scripts/deploy-all.sh l-iam-s2 ap-northeast-2
+./scripts/deploy-all.sh hub-profile ap-northeast-2
 
 # Windows (PowerShell)
-.\scripts\deploy-all.ps1 -HubProfile l-iam-s2 -Region ap-northeast-2
+.\scripts\deploy-all.ps1 -HubProfile hub-profile -Region ap-northeast-2
 ```
 
 > **배포 완료 시 출력되는 정보:**

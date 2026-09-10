@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: ./scripts/generate-env-json.sh [HUB_PROFILE] [REGION]
 
-HUB_PROFILE=${1:-"l-iam-s2"}
+HUB_PROFILE=${1:-"hub-profile"}
 REGION=${2:-"ap-northeast-2"}
 OUTPUT_FILE="env.json"
 

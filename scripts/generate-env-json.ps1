@@ -4,11 +4,11 @@ Automatically generates env.json by reading AWS CLI profiles using 'aws configur
 and querying each profile's AWS Account ID via 'aws sts get-caller-identity'.
 
 .EXAMPLE
-.\scripts\generate-env-json.ps1 -HubProfile l-iam-s2
+.\scripts\generate-env-json.ps1 -HubProfile hub-profile
 #>
 
 param (
-    [string]$HubProfile = "l-iam-s2",
+    [string]$HubProfile = "hub-profile",
     [string]$Region = "ap-northeast-2",
     [string]$OutputFile = "env.json"
 )
