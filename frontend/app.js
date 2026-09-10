@@ -6,6 +6,7 @@ let currentInboundRules = [];
 let currentOutboundRules = [];
 let credentials = null; // { accessKeyId, secretAccessKey, sessionToken, region }
 let isSessionExpired = false;
+let currentWebhooksList = [];
 
 // DOM Elements
 const apiInput = document.getElementById('api-endpoint-input');
@@ -213,11 +214,39 @@ function setupEventListeners() {
       fetchSlackConfig();
     });
   }
-  if (btnSaveWebhook) {
-    btnSaveWebhook.addEventListener('click', saveSlackWebhookConfig);
+  const btnOpenAddWebhook = document.getElementById('btn-open-add-webhook');
+  const btnCloseWebhookModal = document.getElementById('btn-close-webhook-modal');
+  const btnCancelWebhookModal = document.getElementById('btn-cancel-webhook-modal');
+  const btnSaveWebhookModal = document.getElementById('btn-save-webhook-modal');
+  const btnTestAllWebhooks = document.getElementById('btn-test-all-webhooks');
+
+  if (btnOpenAddWebhook) {
+    btnOpenAddWebhook.addEventListener('click', () => openWebhookModal());
   }
-  if (btnTestWebhook) {
-    btnTestWebhook.addEventListener('click', sendTestWebhookNotification);
+  if (btnCloseWebhookModal) {
+    btnCloseWebhookModal.addEventListener('click', () => closeWebhookModal());
+  }
+  if (btnCancelWebhookModal) {
+    btnCancelWebhookModal.addEventListener('click', () => closeWebhookModal());
+  }
+  if (btnSaveWebhookModal) {
+    btnSaveWebhookModal.addEventListener('click', saveWebhookModalSubmit);
+  }
+  if (btnTestAllWebhooks) {
+    btnTestAllWebhooks.addEventListener('click', sendTestAllWebhooks);
+  }
+
+  const webhookModalSchedule = document.getElementById('webhook-modal-schedule');
+  const webhookModalScheduleCustom = document.getElementById('webhook-modal-schedule-custom');
+
+  if (webhookModalSchedule) {
+    webhookModalSchedule.addEventListener('change', () => {
+      if (webhookModalSchedule.value === 'custom') {
+        if (webhookModalScheduleCustom) webhookModalScheduleCustom.style.display = 'block';
+      } else {
+        if (webhookModalScheduleCustom) webhookModalScheduleCustom.style.display = 'none';
+      }
+    });
   }
   if (btnSaveSlack) {
     btnSaveSlack.addEventListener('click', saveSlackEmailConfig);
@@ -1176,18 +1205,65 @@ async function handleCreateSecurityGroup() {
 async function handleSaveRules() {
   if (!selectedSg) return;
 
+  // Client-side validation
+  const validateRules = (rules, ruleTypeName) => {
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      const proto = (r.ipProtocol || 'all').toLowerCase();
+      if (proto === 'tcp' || proto === 'udp') {
+        const fp = r.fromPort !== '' && r.fromPort !== null && r.fromPort !== undefined ? Number(r.fromPort) : null;
+        const tp = r.toPort !== '' && r.toPort !== null && r.toPort !== undefined ? Number(r.toPort) : null;
+        if (fp === null && tp === null) {
+          throw new Error(`${ruleTypeName} 규칙 #${i + 1}: ${proto.toUpperCase()} 프로토콜의 포트 번호를 입력해주세요.`);
+        }
+        const finalFp = fp !== null ? fp : tp;
+        const finalTp = tp !== null ? tp : fp;
+        if (isNaN(finalFp) || finalFp < 0 || finalFp > 65535 || isNaN(finalTp) || finalTp < 0 || finalTp > 65535) {
+          throw new Error(`${ruleTypeName} 규칙 #${i + 1}: 포트 번호는 0 ~ 65535 사이여야 합니다.`);
+        }
+        if (finalFp > finalTp) {
+          throw new Error(`${ruleTypeName} 규칙 #${i + 1}: 시작 포트(${finalFp})가 종료 포트(${finalTp})보다 클 수 없습니다.`);
+        }
+      }
+      if (r.type === 'group' && (!r.groupId || !r.groupId.trim().startsWith('sg-'))) {
+        throw new Error(`${ruleTypeName} 규칙 #${i + 1}: 유효한 보안 그룹 ID(sg-xxxx)를 입력해주세요.`);
+      }
+      if (r.type === 'cidr' && (!r.cidrIp || !r.cidrIp.trim())) {
+        throw new Error(`${ruleTypeName} 규칙 #${i + 1}: CIDR IP(예: 0.0.0.0/0)를 입력해주세요.`);
+      }
+    }
+  };
+
+  try {
+    validateRules(currentInboundRules, '인바운드');
+    validateRules(currentOutboundRules, '아웃바운드');
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
+
   const formatPayloadRules = (rules) => {
     return rules.map(r => {
+      const proto = (r.ipProtocol || 'all').toLowerCase();
+      const isAll = proto === 'all' || proto === '-1';
+      let fp = r.fromPort === '' || r.fromPort === null || r.fromPort === undefined ? null : Number(r.fromPort);
+      let tp = r.toPort === '' || r.toPort === null || r.toPort === undefined ? null : Number(r.toPort);
+
+      if (!isAll && (proto === 'tcp' || proto === 'udp')) {
+        if (fp !== null && tp === null) tp = fp;
+        if (tp !== null && fp === null) fp = tp;
+      }
+
       const payloadRule = {
-        ipProtocol: r.ipProtocol === 'all' ? '-1' : r.ipProtocol,
-        fromPort: r.fromPort === '' ? null : Number(r.fromPort),
-        toPort: r.toPort === '' ? null : Number(r.toPort)
+        ipProtocol: isAll ? '-1' : proto,
+        fromPort: isAll ? null : fp,
+        toPort: isAll ? null : tp
       };
 
       if (r.type === 'cidr') {
-        payloadRule.ipRanges = [{ cidrIp: r.cidrIp, description: r.description }];
+        payloadRule.ipRanges = [{ cidrIp: (r.cidrIp || '0.0.0.0/0').trim(), description: r.description || '' }];
       } else {
-        payloadRule.userIdGroupPairs = [{ groupId: r.groupId, description: r.description }];
+        payloadRule.userIdGroupPairs = [{ groupId: (r.groupId || '').trim(), description: r.description || '' }];
       }
 
       return payloadRule;
@@ -1609,7 +1685,7 @@ function renderRdsBackupsTable(instances) {
 
 // Fetch Slack Configuration from Backend
 async function fetchSlackConfig() {
-  if (!validateEndpoint()) return;
+  if (!validateEndpoint() || !validateAuth()) return;
   try {
     const res = await signedFetch(`${apiEndpoint}/slack/config`, { method: 'GET' });
     const data = await res.json();
@@ -1620,15 +1696,13 @@ async function fetchSlackConfig() {
 
     const config = data.config || {};
     
-    // Webhook fields
-    const webhookUrlInput = document.getElementById('slack-webhook-url');
-    const webhookMsgTypeSelect = document.getElementById('slack-webhook-msg-type');
-    const webhookEnabledToggle = document.getElementById('slack-webhook-enabled-toggle');
-    const webhookLastSentLabel = document.getElementById('slack-webhook-last-sent-time');
+    // Webhook list & schedule fields
+    currentWebhooksList = Array.isArray(config.webhooks) ? config.webhooks : [];
+    renderWebhooksTable();
 
-    if (webhookUrlInput) webhookUrlInput.value = config.webhookUrl || '';
-    if (webhookMsgTypeSelect) webhookMsgTypeSelect.value = config.webhookMessageType || 'summary';
-    if (webhookEnabledToggle) webhookEnabledToggle.checked = config.webhookEnabled === true;
+
+
+    const webhookLastSentLabel = document.getElementById('slack-webhook-last-sent-time');
     if (webhookLastSentLabel) {
       if (config.lastWebhookSentTimestamp) {
         const d = new Date(config.lastWebhookSentTimestamp);
@@ -1661,107 +1735,285 @@ async function fetchSlackConfig() {
     }
   } catch (error) {
     console.error('Failed to fetch Slack config:', error);
-    showToast(`Slack 설정 로드 실패: ${error.message}`, 'danger');
+    if (!error.message || !error.message.includes('Credentials')) {
+      showToast(`Slack 설정 로드 실패: ${error.message}`, 'danger');
+    }
   }
 }
 
-// Save Slack Webhook Configuration
-async function saveSlackWebhookConfig() {
-  if (!validateEndpoint() || !validateAuth()) return;
+// Render Webhooks Table
 
-  const webhookUrlInput = document.getElementById('slack-webhook-url');
-  const webhookMsgTypeSelect = document.getElementById('slack-webhook-msg-type');
-  const webhookEnabledToggle = document.getElementById('slack-webhook-enabled-toggle');
-  const btnSaveWebhook = document.getElementById('btn-save-webhook');
+function formatCronSchedule(cron) {
+  if (!cron) return "매일 09:00 KST";
+  if (cron.includes("0 0 * * ? *")) return "매일 09:00 KST";
+  if (cron.includes("0 3 * * ? *")) return "매일 12:00 KST";
+  if (cron.includes("0 9 * * ? *")) return "매일 18:00 KST";
+  if (cron.includes("MON")) return "매주 월 09:00 KST";
+  return cron;
+}
 
-  const webhookUrl = webhookUrlInput ? webhookUrlInput.value.trim() : '';
-  const webhookMessageType = webhookMsgTypeSelect ? webhookMsgTypeSelect.value : 'summary';
-  const webhookEnabled = webhookEnabledToggle ? webhookEnabledToggle.checked : false;
+function renderWebhooksTable() {
+  const tableBody = document.getElementById('table-body-webhooks');
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
 
-  if (!webhookUrl) {
+  if (currentWebhooksList.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+          등록된 웹훅이 없습니다. 상단의 '새 웹훅 추가' 버튼을 눌러 추가하세요.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  currentWebhooksList.forEach((wh, index) => {
+    const tr = document.createElement('tr');
+    
+    let maskedUrl = wh.url || '';
+    if (maskedUrl.length > 35) {
+      maskedUrl = maskedUrl.substring(0, 22) + '...' + maskedUrl.substring(maskedUrl.length - 8);
+    }
+
+    const typeBadge = `<span class="badge badge-indigo">${wh.messageType || 'summary'}</span>`;
+    const scheduleBadge = `<span class="badge badge-secondary" style="font-size: 0.75rem; font-weight: 500;" title="${wh.scheduleCron || 'cron(0 0 * * ? *)'}">${formatCronSchedule(wh.scheduleCron)}</span>`;
+    const isChecked = wh.enabled !== false ? 'checked' : '';
+
+    tr.innerHTML = `
+      <td style="font-weight: 600; color: var(--text-main);">${wh.name || '웹훅 ' + (index + 1)}</td>
+      <td class="code-text" style="font-size: 0.78rem; color: var(--accent-cyan);" title="${wh.url}">${maskedUrl}</td>
+      <td>${typeBadge}</td>
+      <td>${scheduleBadge}</td>
+      <td>
+        <label class="switch-toggle" style="position: relative; display: inline-block; width: 36px; height: 20px;">
+          <input type="checkbox" onchange="toggleWebhookStatus('${wh.id}')" ${isChecked} style="opacity: 0; width: 0; height: 0;">
+          <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .3s; border-radius: 20px;"></span>
+        </label>
+      </td>
+      <td>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.75rem;" onclick="testSingleWebhook('${wh.id}')" title="테스트 전송">
+            <i data-lucide="send" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.75rem;" onclick="openWebhookModal('${wh.id}')" title="수정">
+            <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button class="btn btn-danger-outline" style="padding: 4px 8px; font-size: 0.75rem;" onclick="deleteWebhook('${wh.id}')" title="삭제">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+          </button>
+        </div>
+      </td>
+    `;
+    tableBody.appendChild(tr);
+  });
+
+  if (window.lucide) lucide.createIcons();
+}
+
+// Modal Handlers
+function openWebhookModal(id = null) {
+  const modal = document.getElementById('modal-webhook');
+  const title = document.getElementById('modal-webhook-title');
+  const idInput = document.getElementById('webhook-modal-id');
+  const nameInput = document.getElementById('webhook-modal-name');
+  const urlInput = document.getElementById('webhook-modal-url');
+  const typeSelect = document.getElementById('webhook-modal-type');
+  const scheduleSelect = document.getElementById('webhook-modal-schedule');
+  const scheduleCustom = document.getElementById('webhook-modal-schedule-custom');
+  const enabledToggle = document.getElementById('webhook-modal-enabled');
+
+  if (id) {
+    const wh = currentWebhooksList.find(item => item.id === id);
+    if (wh) {
+      if (title) title.textContent = '웹훅 수정';
+      if (idInput) idInput.value = wh.id;
+      if (nameInput) nameInput.value = wh.name || '';
+      if (urlInput) urlInput.value = wh.url || '';
+      if (typeSelect) typeSelect.value = wh.messageType || 'summary';
+      if (enabledToggle) enabledToggle.checked = wh.enabled !== false;
+
+      const scheduleVal = wh.scheduleCron || 'cron(0 0 * * ? *)';
+      if (scheduleSelect) {
+        const hasOpt = Array.from(scheduleSelect.options).some(o => o.value === scheduleVal);
+        if (hasOpt) {
+          scheduleSelect.value = scheduleVal;
+          if (scheduleCustom) scheduleCustom.style.display = 'none';
+        } else {
+          scheduleSelect.value = 'custom';
+          if (scheduleCustom) {
+            scheduleCustom.style.display = 'block';
+            scheduleCustom.value = scheduleVal;
+          }
+        }
+      }
+    }
+  } else {
+    if (title) title.textContent = '웹훅 등록';
+    if (idInput) idInput.value = '';
+    if (nameInput) nameInput.value = '';
+    if (urlInput) urlInput.value = '';
+    if (typeSelect) typeSelect.value = 'summary';
+    if (enabledToggle) enabledToggle.checked = true;
+    if (scheduleSelect) scheduleSelect.value = 'cron(0 0 * * ? *)';
+    if (scheduleCustom) {
+      scheduleCustom.style.display = 'none';
+      scheduleCustom.value = '';
+    }
+  }
+
+  if (modal) modal.classList.add('open');
+}
+
+function closeWebhookModal() {
+  const modal = document.getElementById('modal-webhook');
+  if (modal) modal.classList.remove('open');
+}
+
+async function saveWebhookModalSubmit() {
+  const idInput = document.getElementById('webhook-modal-id');
+  const nameInput = document.getElementById('webhook-modal-name');
+  const urlInput = document.getElementById('webhook-modal-url');
+  const typeSelect = document.getElementById('webhook-modal-type');
+  const scheduleSelect = document.getElementById('webhook-modal-schedule');
+  const scheduleCustom = document.getElementById('webhook-modal-schedule-custom');
+  const enabledToggle = document.getElementById('webhook-modal-enabled');
+
+  const id = idInput ? idInput.value.trim() : '';
+  const name = nameInput ? nameInput.value.trim() : '';
+  const url = urlInput ? urlInput.value.trim() : '';
+  const messageType = typeSelect ? typeSelect.value : 'summary';
+  const enabled = enabledToggle ? enabledToggle.checked : true;
+
+  let scheduleCron = scheduleSelect ? scheduleSelect.value : 'cron(0 0 * * ? *)';
+  if (scheduleCron === 'custom' && scheduleCustom) {
+    scheduleCron = scheduleCustom.value.trim() || 'cron(0 0 * * ? *)';
+  }
+
+  if (!name) {
+    showToast('웹훅 이름을 입력해주세요.', 'warning');
+    return;
+  }
+  if (!url) {
     showToast('Slack Webhook URL을 입력해주세요.', 'warning');
     return;
   }
 
-  try {
-    if (btnSaveWebhook) {
-      btnSaveWebhook.disabled = true;
-      btnSaveWebhook.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>저장 중...</span>`;
-      if (window.lucide) lucide.createIcons();
+  if (id) {
+    const index = currentWebhooksList.findIndex(item => item.id === id);
+    if (index !== -1) {
+      currentWebhooksList[index] = { id, name, url, messageType, scheduleCron, enabled };
     }
+  } else {
+    const newId = 'wh_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    currentWebhooksList.push({ id: newId, name, url, messageType, scheduleCron, enabled });
+  }
 
+  closeWebhookModal();
+  renderWebhooksTable();
+  await saveWebhooksListToBackend();
+}
+
+async function toggleWebhookStatus(id) {
+  const wh = currentWebhooksList.find(item => item.id === id);
+  if (wh) {
+    wh.enabled = !wh.enabled;
+    renderWebhooksTable();
+    await saveWebhooksListToBackend();
+  }
+}
+
+async function deleteWebhook(id) {
+  if (!confirm('이 웹훅 설정을 삭제하시겠습니까?')) return;
+  currentWebhooksList = currentWebhooksList.filter(item => item.id !== id);
+  renderWebhooksTable();
+  await saveWebhooksListToBackend();
+}
+
+async function saveWebhooksListToBackend() {
+  if (!validateEndpoint() || !validateAuth()) return;
+  try {
     const res = await signedFetch(`${apiEndpoint}/slack/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhookUrl, webhookMessageType, webhookEnabled })
+      body: JSON.stringify({ webhooks: currentWebhooksList })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || '웹훅 설정 저장에 실패했습니다.');
+    }
+    showToast('웹훅 목록 설정이 성공적으로 저장되었습니다.', 'success');
+  } catch (error) {
+    console.error('Failed to save webhooks list:', error);
+    showToast(`웹훅 설정 저장 실패: ${error.message}`, 'danger');
+  }
+}
+
+async function testSingleWebhook(id) {
+  if (!validateEndpoint() || !validateAuth()) return;
+  const wh = currentWebhooksList.find(item => item.id === id);
+  if (!wh) return;
+
+  try {
+    showToast(`[${wh.name}] 테스트 웹훅 전송 중...`, 'info');
+    const res = await signedFetch(`${apiEndpoint}/slack/webhook/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl: wh.url, messageType: wh.messageType, isTest: true, scanAll: true, isWebhook: true })
     });
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.message || 'Slack Webhook 설정 저장에 실패했습니다.');
+      throw new Error(data.message || '웹훅 전송에 실패했습니다.');
     }
 
-    showToast('Slack Webhook 설정이 성공적으로 저장되었습니다.', 'success');
-  } catch (error) {
-    console.error('Failed to save Slack Webhook config:', error);
-    showToast(`Slack Webhook 설정 저장 실패: ${error.message}`, 'danger');
-  } finally {
-    if (btnSaveWebhook) {
-      btnSaveWebhook.disabled = false;
-      btnSaveWebhook.innerHTML = `<i data-lucide="save"></i> <span>설정 저장</span>`;
-      if (window.lucide) lucide.createIcons();
+    showToast(`웹훅 [${wh.name}] 전송 성공! (${wh.messageType.toUpperCase()} 타입)`, 'success');
+    const lastSentLabel = document.getElementById('slack-webhook-last-sent-time');
+    if (lastSentLabel && data.timestamp) {
+      const d = new Date(data.timestamp);
+      lastSentLabel.textContent = `최근 전송: ${d.toLocaleString('ko-KR')}`;
     }
+  } catch (error) {
+    console.error('Failed to send webhook test:', error);
+    showToast(`웹훅 [${wh.name}] 전송 실패: ${error.message}`, 'danger');
   }
 }
 
-// Send Test Webhook Notification
-async function sendTestWebhookNotification() {
+async function sendTestAllWebhooks() {
   if (!validateEndpoint() || !validateAuth()) return;
-
-  const webhookUrlInput = document.getElementById('slack-webhook-url');
-  const webhookMsgTypeSelect = document.getElementById('slack-webhook-msg-type');
-  const btnTestWebhook = document.getElementById('btn-test-webhook');
-
-  const webhookUrl = webhookUrlInput ? webhookUrlInput.value.trim() : '';
-  const messageType = webhookMsgTypeSelect ? webhookMsgTypeSelect.value : 'summary';
-
-  if (!webhookUrl) {
-    showToast('Slack Webhook URL을 입력한 후 테스트를 진행해주세요.', 'warning');
-    return;
-  }
+  const btnTestAll = document.getElementById('btn-test-all-webhooks');
 
   try {
-    if (btnTestWebhook) {
-      btnTestWebhook.disabled = true;
-      btnTestWebhook.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>전송 중...</span>`;
+    if (btnTestAll) {
+      btnTestAll.disabled = true;
+      btnTestAll.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>전체 웹훅 전송 중...</span>`;
       if (window.lucide) lucide.createIcons();
     }
 
     const res = await signedFetch(`${apiEndpoint}/slack/webhook/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhookUrl, messageType, isTest: true, scanAll: true, isWebhook: true })
+      body: JSON.stringify({ isTest: true, scanAll: true, isWebhook: true })
     });
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.message || '테스트 웹훅 전송에 실패했습니다.');
+      throw new Error(data.message || '전체 웹훅 전송에 실패했습니다.');
     }
 
-    showToast(`슬랙 웹훅 전송 성공! (${messageType.toUpperCase()} 타입)`, 'success');
-    
-    const webhookLastSentLabel = document.getElementById('slack-webhook-last-sent-time');
-    if (webhookLastSentLabel && data.timestamp) {
+    showToast(`전체 활성 웹훅 전송 성공! (${data.successfulCount || 0}건 전송 완료)`, 'success');
+    const lastSentLabel = document.getElementById('slack-webhook-last-sent-time');
+    if (lastSentLabel && data.timestamp) {
       const d = new Date(data.timestamp);
-      webhookLastSentLabel.textContent = `최근 전송: ${d.toLocaleString('ko-KR')}`;
+      lastSentLabel.textContent = `최근 전송: ${d.toLocaleString('ko-KR')}`;
     }
   } catch (error) {
-    console.error('Failed to send test Slack Webhook:', error);
-    showToast(`테스트 웹훅 전송 실패: ${error.message}`, 'danger');
+    console.error('Failed to send test all webhooks:', error);
+    showToast(`전체 웹훅 전송 실패: ${error.message}`, 'danger');
   } finally {
-    if (btnTestWebhook) {
-      btnTestWebhook.disabled = false;
-      btnTestWebhook.innerHTML = `<i data-lucide="send"></i> <span>테스트 웹훅 전송</span>`;
+    if (btnTestAll) {
+      btnTestAll.disabled = false;
+      btnTestAll.innerHTML = `<i data-lucide="send"></i> <span>전체 활성 웹훅 테스트</span>`;
       if (window.lucide) lucide.createIcons();
     }
   }
@@ -1874,4 +2126,6 @@ async function sendTestSlackNotification() {
     }
   }
 }
+
+
 

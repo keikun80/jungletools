@@ -25,9 +25,11 @@ export const handler = async (event) => {
     const updatedConfig = {
       ...existingItem,
       id: "default",
+      ...(Array.isArray(body.webhooks) && { webhooks: body.webhooks }),
       ...(body.webhookUrl !== undefined && { webhookUrl: body.webhookUrl }),
       ...(body.webhookMessageType !== undefined && { webhookMessageType: body.webhookMessageType }),
       ...(body.webhookEnabled !== undefined && { webhookEnabled: body.webhookEnabled === true }),
+      ...(body.webhookScheduleCron !== undefined && { webhookScheduleCron: body.webhookScheduleCron }),
       ...(body.channelEmail !== undefined && { channelEmail: body.channelEmail }),
       ...(body.senderEmail !== undefined && { senderEmail: body.senderEmail }),
       ...(body.scheduleCron !== undefined && { scheduleCron: body.scheduleCron }),

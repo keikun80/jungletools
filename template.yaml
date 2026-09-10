@@ -362,7 +362,7 @@ Resources:
         ScheduleEvent:
           Type: Schedule
           Properties:
-            Schedule: cron(0 0 * * ? *)
+            Schedule: cron(0 * * * ? *)
             Enabled: true
       Environment:
         Variables:

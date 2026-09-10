@@ -43,11 +43,7 @@ function getScanTargetAccounts() {
 function filterReportByMessageType(reportData, type) {
   if (type === "summary") {
     return {
-      type: "summary",
-      summary: reportData.summary,
-      subject: reportData.subject,
-      totalHealthy: reportData.totalHealthy,
-      totalFailure: reportData.totalFailure
+      summary: reportData.summary || reportData.subject
     };
   } else if (type === "report") {
     return {
@@ -71,6 +67,66 @@ function filterReportByMessageType(reportData, type) {
   }
 }
 
+
+export function matchesCron(cronExpr, date = new Date()) {
+  if (!cronExpr || typeof cronExpr !== "string") return true;
+  let expr = cronExpr.trim();
+  const matchWrapper = expr.match(/^cron\((.+)\)$/i);
+  if (matchWrapper) {
+    expr = matchWrapper[1].trim();
+  }
+  const parts = expr.split(/\s+/);
+  if (parts.length < 5) return true;
+
+  const currentMinute = date.getUTCMinutes();
+  const currentHour = date.getUTCHours();
+  const currentDayOfMonth = date.getUTCDate();
+  const currentMonth = date.getUTCMonth() + 1;
+  const currentDayOfWeek = date.getUTCDay(); // 0 (Sun) - 6 (Sat)
+
+  const [minPart, hourPart, domPart, monPart, dowPart] = parts;
+
+  function matchField(fieldVal, currentVal, isDow = false) {
+    if (!fieldVal || fieldVal === "*" || fieldVal === "?") return true;
+    const subparts = fieldVal.split(",");
+    for (let p of subparts) {
+      p = p.trim();
+      if (p === "*" || p === "?") return true;
+      if (isDow) {
+        const dowMap = { SUN: 1, MON: 2, TUE: 3, WED: 4, THU: 5, FRI: 6, SAT: 7 };
+        const awsDow = currentDayOfWeek + 1; // AWS: 1=SUN, 2=MON... 7=SAT
+        const upper = p.toUpperCase();
+        if (dowMap[upper] !== undefined && dowMap[upper] === awsDow) return true;
+        if (parseInt(p, 10) === awsDow) return true;
+        if (parseInt(p, 10) === currentDayOfWeek) return true;
+        return false;
+      }
+      if (p.includes("/")) {
+        const [range, stepStr] = p.split("/");
+        const step = parseInt(stepStr, 10);
+        if (isNaN(step) || step <= 0) continue;
+        const start = range === "*" ? 0 : parseInt(range, 10);
+        if ((currentVal - start) % step === 0 && currentVal >= start) return true;
+      }
+      if (p.includes("-")) {
+        const [startStr, endStr] = p.split("-");
+        const start = parseInt(startStr, 10);
+        const end = parseInt(endStr, 10);
+        if (currentVal >= start && currentVal <= end) return true;
+      }
+      if (parseInt(p, 10) === currentVal) return true;
+    }
+    return false;
+  }
+
+  const hourMatch = matchField(hourPart, currentHour);
+  const domMatch = matchField(domPart, currentDayOfMonth);
+  const monMatch = matchField(monPart, currentMonth);
+  const dowMatch = matchField(dowPart, currentDayOfWeek, true);
+
+  return hourMatch && domMatch && monMatch && dowMatch;
+}
+
 export const handler = async (event) => {
   const SCAN_TARGET_ACCOUNTS = getScanTargetAccounts();
   try {
@@ -81,7 +137,10 @@ export const handler = async (event) => {
 
     const httpMethod = (event.requestContext?.http?.method || event.httpMethod || "POST").toUpperCase();
     const requestPath = event.rawPath || event.requestContext?.http?.path || "";
-    const isWebhook = requestPath.includes("/webhook") || body.isWebhook === true;
+    const isWebhookRequest = requestPath.includes("/webhook") || body.isWebhook === true;
+    const isApiGatewayEvent = !!(event.requestContext || event.httpMethod || event.rawPath);
+    const isScheduledEvent = event.source === "aws.events" || event["detail-type"] === "Scheduled Event" || (!isApiGatewayEvent && !body.isTest);
+    const isWebhook = isWebhookRequest || isScheduledEvent;
     const isGetOrPreview = 
       httpMethod === "GET" || 
       requestPath === "/slack/report" ||
@@ -92,23 +151,7 @@ export const handler = async (event) => {
     const messageType = (event.queryStringParameters?.type || body.messageType || body.type || (requestPath.includes("/preview") ? "preview" : "full")).toLowerCase();
     const isRefreshRequested = event.queryStringParameters?.refresh === "true" || body.refresh === true;
 
-    // Fast-path for GET/preview: return cached report if available and refresh is not forced
-    if (isGetOrPreview && !isRefreshRequested && !isWebhook) {
-      try {
-        const configRes = await docClient.send(
-          new GetCommand({
-            TableName: SLACK_CONFIG_TABLE,
-            Key: { id: "default" }
-          })
-        );
-        if (configRes.Item?.latestReport) {
-          console.log(`Serving report from DynamoDB cache (<50ms), type=${messageType}`);
-          return buildResponse(200, filterReportByMessageType(configRes.Item.latestReport, messageType));
-        }
-      } catch (e) {
-        console.warn("Failed to read latestReport cache from DynamoDB:", e.message);
-      }
-    }
+
 
     let channelEmail = body.channelEmail || "";
     let senderEmail = body.senderEmail || "";
@@ -140,7 +183,7 @@ export const handler = async (event) => {
     }
 
     let toAddresses = [];
-    if (!isGetOrPreview) {
+    if (!isGetOrPreview && !isWebhook) {
       // Support multiple comma/semicolon/space-separated emails
       toAddresses = channelEmail
         .split(/[,;\s]+/)
@@ -150,10 +193,10 @@ export const handler = async (event) => {
       if (toAddresses.length === 0) {
         return buildResponse(400, { message: "No valid Slack Channel Email address configured." });
       }
-    }
 
-    if (!senderEmail) {
-      senderEmail = toAddresses[0];
+      if (!senderEmail) {
+        senderEmail = toAddresses[0];
+      }
     }
 
     const targetRoleArn = event.headers?.["x-target-role-arn"] || event.headers?.["X-Target-Role-Arn"];
@@ -503,7 +546,7 @@ export const handler = async (event) => {
 - Error: ${totalFailure}개
 - 모니터링 비율: ${totalHealthy} / ${nonUnprotectedTotal}`;
 
-    const summaryText = `제목: ${subjectText}\n정상: ${totalHealthy}개 / 실패: ${totalFailure}개`;
+    const summaryText = subjectText;
 
     const reportData = {
       summary: summaryText,
@@ -520,85 +563,194 @@ export const handler = async (event) => {
       cachedAt: now.toISOString()
     };
 
-    // Save latestReport to DynamoDB cache so subsequent GET /slack/report calls respond in <50ms
-    try {
-      await docClient.send(
-        new UpdateCommand({
-          TableName: SLACK_CONFIG_TABLE,
-          Key: { id: "default" },
-          UpdateExpression: "SET latestReport = :report",
-          ExpressionAttributeValues: { ":report": reportData }
-        })
-      );
-    } catch (e) {
-      console.warn("Failed to update latestReport cache in DynamoDB:", e.message);
-    }
+
 
     if (isWebhook) {
-      let webhookUrl = body.webhookUrl || "";
-      if (!webhookUrl) {
+      let webhooksToSend = [];
+
+      if (body.webhookId) {
         try {
           const configRes = await docClient.send(
             new GetCommand({ TableName: SLACK_CONFIG_TABLE, Key: { id: "default" } })
           );
-          webhookUrl = configRes.Item?.webhookUrl || "";
-        } catch (e) {}
-      }
-
-      if (!webhookUrl) {
-        return buildResponse(400, { message: "No Slack Webhook URL configured." });
-      }
-
-      let textPayload = "";
-      if (messageType === "summary") {
-        textPayload = summaryText;
-      } else if (messageType === "report") {
-        textPayload = plainTextBody;
-      } else if (messageType === "preview") {
-        textPayload = `*${subjectText}*\n상태: ${backupStatusText} (${fullDateFormatted})`;
-      } else {
-        textPayload = `*${subjectText}*\n\n${plainTextBody}`;
-      }
-
-      try {
-        const slackRes = await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: textPayload })
-        });
-
-        if (!slackRes.ok) {
-          const errText = await slackRes.text();
-          return buildResponse(500, { message: `Slack Webhook delivery failed: ${errText}` });
+          const configItem = configRes.Item || {};
+          const configuredWebhooks = Array.isArray(configItem.webhooks) ? configItem.webhooks : [];
+          const target = configuredWebhooks.find(w => w.id === body.webhookId);
+          if (target && target.url) {
+            webhooksToSend.push(target);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch target webhook:", e.message);
         }
-      } catch (err) {
-        return buildResponse(500, { message: `Failed to send Slack Webhook: ${err.message}` });
+      } else if (body.webhookUrl) {
+        webhooksToSend.push({
+          id: "custom",
+          name: "Test Webhook",
+          url: body.webhookUrl,
+          messageType: messageType || "summary",
+          enabled: true
+        });
+      } else {
+        try {
+          const configRes = await docClient.send(
+            new GetCommand({ TableName: SLACK_CONFIG_TABLE, Key: { id: "default" } })
+          );
+          const configItem = configRes.Item || {};
+          let configuredWebhooks = Array.isArray(configItem.webhooks) ? configItem.webhooks : [];
+          if (configuredWebhooks.length === 0 && configItem.webhookUrl) {
+            configuredWebhooks = [{
+              id: "default",
+              name: "기본 웹훅",
+              url: configItem.webhookUrl,
+              messageType: configItem.webhookMessageType || "summary",
+              scheduleCron: configItem.webhookScheduleCron || "cron(0 0 * * ? *)",
+              enabled: configItem.webhookEnabled === true
+            }];
+          }
+
+          if (isScheduledEvent) {
+            webhooksToSend = configuredWebhooks.filter(w => {
+              if (w.enabled === false || !w.url) return false;
+              const cron = w.scheduleCron || "cron(0 0 * * ? *)";
+              return matchesCron(cron, now);
+            });
+            console.log(`[Scheduled Run] Matching webhooks for UTC hour ${now.getUTCHours()}: ${webhooksToSend.length}/${configuredWebhooks.length}`);
+          } else {
+            webhooksToSend = configuredWebhooks.filter(w => w.enabled !== false && w.url);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch webhooks from DynamoDB:", e.message);
+        }
       }
 
-      const timestampStr = now.toISOString();
-      try {
-        await docClient.send(
-          new UpdateCommand({
-            TableName: SLACK_CONFIG_TABLE,
-            Key: { id: "default" },
-            UpdateExpression: "SET lastWebhookSentTimestamp = :ts",
-            ExpressionAttributeValues: { ":ts": timestampStr }
+      if (webhooksToSend.length === 0 && !isScheduledEvent) {
+        return buildResponse(400, { message: "No enabled Slack Webhook URL configured." });
+      }
+
+      let successful = [];
+      let failed = [];
+
+      if (webhooksToSend.length > 0) {
+        const results = await Promise.allSettled(
+          webhooksToSend.map(async (wh) => {
+            const whType = (wh.messageType || messageType || "summary").toLowerCase();
+            let textPayload = "";
+            if (whType === "summary") {
+              textPayload = summaryText;
+            } else if (whType === "report") {
+              textPayload = plainTextBody;
+            } else if (whType === "preview") {
+              textPayload = `*${subjectText}*\n상태: ${backupStatusText} (${fullDateFormatted})`;
+            } else {
+              textPayload = `*${subjectText}*\n\n${plainTextBody}`;
+            }
+
+            const slackRes = await fetch(wh.url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json; charset=utf-8" },
+              body: JSON.stringify({ text: textPayload })
+            });
+
+            if (!slackRes.ok) {
+              const errText = await slackRes.text();
+              throw new Error(`Webhook [${wh.name || wh.url}] failed: ${errText}`);
+            }
+            return { id: wh.id, name: wh.name, url: wh.url, messageType: whType };
           })
         );
-      } catch (e) {}
 
-      return buildResponse(200, {
-        message: "Slack Webhook notification sent successfully",
-        messageType,
-        webhookUrl,
-        timestamp: timestampStr,
-        totalFailure,
-        totalHealthy
-      });
+        successful = results.filter(r => r.status === "fulfilled").map(r => r.value);
+        failed = results.filter(r => r.status === "rejected").map(r => r.reason.message);
+
+        const timestampStr = now.toISOString();
+        try {
+          await docClient.send(
+            new UpdateCommand({
+              TableName: SLACK_CONFIG_TABLE,
+              Key: { id: "default" },
+              UpdateExpression: "SET lastWebhookSentTimestamp = :ts",
+              ExpressionAttributeValues: { ":ts": timestampStr }
+            })
+          );
+        } catch (e) {}
+
+        if (successful.length === 0 && !isScheduledEvent) {
+          return buildResponse(500, {
+            message: "All Slack Webhooks failed",
+            errors: failed
+          });
+        }
+      }
+
+      if (!isScheduledEvent || isWebhookRequest) {
+        return buildResponse(200, {
+          message: `Slack Webhook notification sent successfully (${successful.length}/${webhooksToSend.length})`,
+          timestamp: now.toISOString(),
+          successfulCount: successful.length,
+          failedCount: failed.length,
+          totalFailure,
+          totalHealthy,
+          details: { successful, failed }
+        });
+      }
     }
 
     if (isGetOrPreview) {
       return buildResponse(200, filterReportByMessageType(reportData, messageType));
+    }
+
+    // Process Email sending (if channelEmail is configured and enabled)
+    try {
+      const configRes = await docClient.send(
+        new GetCommand({ TableName: SLACK_CONFIG_TABLE, Key: { id: "default" } })
+      );
+      const config = configRes.Item || {};
+      if (!channelEmail) {
+        channelEmail = config.channelEmail || "";
+        senderEmail = senderEmail || config.senderEmail || "";
+      }
+
+      if (config.enabled === false && !isTest && !body.channelEmail) {
+        console.log("Slack Email notification is disabled in config.");
+        return buildResponse(200, {
+          message: "Scheduled run completed. Webhooks sent. Slack Email disabled.",
+          timestamp: now.toISOString()
+        });
+      }
+
+      if (isScheduledEvent) {
+        const emailCron = config.scheduleCron || "cron(0 0 * * ? *)";
+        if (!matchesCron(emailCron, now)) {
+          console.log(`[Scheduled Run] Slack Email Alarm not scheduled for UTC hour ${now.getUTCHours()}. Skipping email.`);
+          return buildResponse(200, {
+            message: "Scheduled run completed. Webhooks processed. Slack Email not scheduled for this hour.",
+            timestamp: now.toISOString()
+          });
+        }
+      }
+    } catch (e) {}
+
+    if (!channelEmail) {
+      return buildResponse(200, {
+        message: "Scheduled run completed. Webhooks sent. No channel email configured.",
+        timestamp: now.toISOString()
+      });
+    }
+
+    toAddresses = channelEmail
+      .split(/[,;\s]+/)
+      .map(e => e.trim())
+      .filter(e => e.length > 0);
+
+    if (toAddresses.length === 0) {
+      return buildResponse(200, {
+        message: "Scheduled run completed. Webhooks sent.",
+        timestamp: now.toISOString()
+      });
+    }
+
+    if (!senderEmail) {
+      senderEmail = toAddresses[0];
     }
 
     // Send Email via AWS SES
@@ -644,7 +796,7 @@ export const handler = async (event) => {
       sentTo: toAddresses
     });
   } catch (error) {
-    console.error("Error sending Slack Email notification:", error);
-    return buildResponse(500, { message: "Failed to send Slack Email notification", error: error.message });
+    console.error("Error sending Slack notification:", error);
+    return buildResponse(500, { message: error.message || "Failed to send Slack notification", error: error.message });
   }
 };

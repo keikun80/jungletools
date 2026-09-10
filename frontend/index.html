@@ -474,60 +474,43 @@
         <div class="view-header" style="margin-bottom: 20px;">
           <div>
             <h2>Slack Webhook Management</h2>
-            <p>슬랙 웹훅(Incoming Webhook) URL 설정, 전송 메시지 타입 선택 및 테스트 전송</p>
+            <p>슬랙 웹훅(Incoming Webhook) 등록, 채널별 전송 메시지 타입 설정 및 테스트 전송</p>
+          </div>
+          <div>
+            <button id="btn-open-add-webhook" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i>
+              <span>새 웹훅 추가</span>
+            </button>
           </div>
         </div>
 
-        <div class="slack-config-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; max-width: 720px; box-shadow: var(--shadow-sm);">
-          
-          <div class="form-group" style="margin-bottom: 20px;">
-            <label for="slack-webhook-url" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
-              Slack Webhook URL <span class="required" style="color: var(--danger);">*</span>
-            </label>
-            <input type="text" id="slack-webhook-url" placeholder="https://hooks.slack.com/services/YOUR/WEBHOOK/URL" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
-            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
-              Slack App &gt; Incoming Webhooks에서 생성한 Webhook URL을 입력하세요.
-            </p>
-          </div>
+        <!-- Webhook List Table Wrapper -->
+        <div class="logs-table-wrapper" style="margin-bottom: 20px;">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th style="width: 18%;">웹훅 이름</th>
+                <th style="width: 28%;">Slack Webhook URL</th>
+                <th style="width: 13%;">메시지 타입</th>
+                <th style="width: 18%;">전송 일정</th>
+                <th style="width: 9%;">상태</th>
+                <th style="width: 14%;">작업</th>
+              </tr>
+            </thead>
+            <tbody id="table-body-webhooks">
+              <!-- Dynamic Webhook Rows -->
+            </tbody>
+          </table>
+        </div>
 
-          <div class="form-group" style="margin-bottom: 20px;">
-            <label for="slack-webhook-msg-type" style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block;">
-              전송 메시지 타입 (Message Format)
-            </label>
-            <select id="slack-webhook-msg-type" style="width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-size: 0.85rem;">
-              <option value="summary" selected>summary (요약: 제목 및 정상/실패 개수만 전송)</option>
-              <option value="report">report (리포트: 본문 텍스트 전체 전송)</option>
-              <option value="preview">preview (미리보기: 제목 + 상태 + 일시)</option>
-              <option value="full">full (전체: 제목 + 본문 텍스트 전체 전송)</option>
-            </select>
-            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
-              웹훅으로 전송할 알림 메시지의 형식을 선택하세요.
-            </p>
-          </div>
 
-          <div class="form-group" style="margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
-            <div>
-              <div style="font-weight: 600; font-size: 0.9rem;">웹훅 알림 활성화</div>
-              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">웹훅 알림 기능을 활성화합니다.</div>
-            </div>
-            <label class="switch-toggle" style="position: relative; display: inline-block; width: 44px; height: 24px;">
-              <input type="checkbox" id="slack-webhook-enabled-toggle" style="opacity: 0; width: 0; height: 0;">
-              <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .3s; border-radius: 24px;"></span>
-            </label>
-          </div>
 
-          <div style="display: flex; gap: 12px; justify-content: flex-end; align-items: center; border-top: 1px solid var(--border-color); padding-top: 20px;">
-            <span id="slack-webhook-last-sent-time" style="font-size: 0.78rem; color: var(--text-muted); margin-right: auto;">최근 전송: 없음</span>
-            <button id="btn-test-webhook" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px;">
-              <i data-lucide="send" style="width: 14px; height: 14px;"></i>
-              <span>테스트 웹훅 전송</span>
-            </button>
-            <button id="btn-save-webhook" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px;">
-              <i data-lucide="save" style="width: 14px; height: 14px;"></i>
-              <span>설정 저장</span>
-            </button>
-          </div>
-
+        <div style="display: flex; gap: 12px; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px 24px;">
+          <span id="slack-webhook-last-sent-time" style="font-size: 0.8rem; color: var(--text-muted);">최근 전송: 없음</span>
+          <button id="btn-test-all-webhooks" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="send" style="width: 14px; height: 14px;"></i>
+            <span>전체 활성 웹훅 테스트</span>
+          </button>
         </div>
       </section>
 
@@ -619,6 +602,61 @@
       </section>
 
     </main>
+  </div>
+
+  <!-- Modal: Webhook Add / Edit -->
+  <div id="modal-webhook" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 id="modal-webhook-title">웹훅 등록</h3>
+        <button id="btn-close-webhook-modal" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="webhook-modal-id" value="" />
+        <div class="form-group">
+          <label for="webhook-modal-name">웹훅 이름 <span class="required">*</span></label>
+          <input type="text" id="webhook-modal-name" placeholder="예: BO개발팀 슬랙 채널" required />
+        </div>
+        <div class="form-group">
+          <label for="webhook-modal-url">Slack Webhook URL <span class="required">*</span></label>
+          <input type="text" id="webhook-modal-url" placeholder="https://hooks.slack.com/services/YOUR/WEBHOOK/URL" required style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+        </div>
+        <div class="form-group">
+          <label for="webhook-modal-type">전송 메시지 타입 (Message Format)</label>
+          <select id="webhook-modal-type">
+            <option value="summary" selected>summary (요약: 줄바꿈 없이 제목만 전송)</option>
+            <option value="report">report (리포트: 본문 텍스트 전체)</option>
+            <option value="preview">preview (미리보기: 제목 + 상태 + 일시)</option>
+            <option value="full">full (전체: 제목 + 본문 텍스트 전체)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="webhook-modal-schedule">전송 일정 (EventBridge Schedule) <span class="required">*</span></label>
+          <select id="webhook-modal-schedule">
+            <option value="cron(0 0 * * ? *)" selected>매일 오전 09:00 KST (cron(0 0 * * ? *))</option>
+            <option value="cron(0 3 * * ? *)">매일 12:00 KST (cron(0 3 * * ? *))</option>
+            <option value="cron(0 9 * * ? *)">매일 18:00 KST (cron(0 9 * * ? *))</option>
+            <option value="cron(0 0 ? * MON *)">매주 월요일 09:00 KST (cron(0 0 ? * MON *))</option>
+            <option value="custom">직접 입력 (Custom Crontab)</option>
+          </select>
+          <input type="text" id="webhook-modal-schedule-custom" placeholder="cron(0 0 * * ? *)" style="display: none; margin-top: 8px; width: 100%; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-main); color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;" />
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;">
+            AWS EventBridge 표현식 형식: <code>cron(분 시 일 월 요일 연도)</code> (예: <code>cron(0 0 * * ? *)</code>는 UTC 00:00 = KST 09:00)
+          </p>
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+          <span style="font-weight: 600; font-size: 0.88rem;">웹훅 알림 활성화</span>
+          <label class="switch-toggle" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+            <input type="checkbox" id="webhook-modal-enabled" checked style="opacity: 0; width: 0; height: 0;">
+            <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .3s; border-radius: 24px;"></span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-webhook-modal" class="btn btn-secondary">취소</button>
+        <button id="btn-save-webhook-modal" class="btn btn-primary">저장</button>
+      </div>
+    </div>
   </div>
 
   <!-- Modal 1: Create Security Group -->

@@ -17,11 +17,30 @@ export const handler = async (event) => {
     );
 
     const item = result.Item || {};
+    let webhooks = Array.isArray(item.webhooks)
+      ? item.webhooks.map((wh) => ({
+          ...wh,
+          scheduleCron: wh.scheduleCron || "cron(0 0 * * ? *)"
+        }))
+      : [];
+    if (webhooks.length === 0 && item.webhookUrl) {
+      webhooks = [{
+        id: "wh_default",
+        name: "기본 웹훅",
+        url: item.webhookUrl,
+        messageType: item.webhookMessageType || "summary",
+        scheduleCron: item.webhookScheduleCron || "cron(0 0 * * ? *)",
+        enabled: item.webhookEnabled === true
+      }];
+    }
+
     const config = {
       id: "default",
+      webhooks,
       webhookUrl: item.webhookUrl || "",
       webhookMessageType: item.webhookMessageType || "summary",
       webhookEnabled: item.webhookEnabled === true,
+      webhookScheduleCron: item.webhookScheduleCron || "cron(0 0 * * ? *)",
       channelEmail: item.channelEmail || "",
       senderEmail: item.senderEmail || "",
       scheduleCron: item.scheduleCron || "cron(0 0 * * ? *)",
