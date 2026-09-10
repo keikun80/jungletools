@@ -4,7 +4,7 @@ import { RDSClient, DescribeDBInstancesCommand, DescribeDBSnapshotsCommand, Desc
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { buildResponse, getAwsClient } from "../utils.mjs";
+import { buildResponse, getAwsClient, isValidSlackWebhookUrl } from "../utils.mjs";
 
 const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient);
@@ -583,10 +583,15 @@ export const handler = async (event) => {
           console.warn("Failed to fetch target webhook:", e.message);
         }
       } else if (body.webhookUrl) {
+        if (!isValidSlackWebhookUrl(body.webhookUrl)) {
+          return buildResponse(400, {
+            message: "유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...' 형식이어야 합니다."
+          });
+        }
         webhooksToSend.push({
           id: "custom",
           name: "Test Webhook",
-          url: body.webhookUrl,
+          url: body.webhookUrl.trim(),
           messageType: messageType || "summary",
           enabled: true
         });
@@ -633,6 +638,10 @@ export const handler = async (event) => {
       if (webhooksToSend.length > 0) {
         const results = await Promise.allSettled(
           webhooksToSend.map(async (wh) => {
+            if (!isValidSlackWebhookUrl(wh.url)) {
+              throw new Error(`Security Violation: Disallowed or malformed webhook URL [${wh.url}]`);
+            }
+
             const whType = (wh.messageType || messageType || "summary").toLowerCase();
             let textPayload = "";
             if (whType === "summary") {
@@ -645,7 +654,7 @@ export const handler = async (event) => {
               textPayload = `*${subjectText}*\n\n${plainTextBody}`;
             }
 
-            const slackRes = await fetch(wh.url, {
+            const slackRes = await fetch(wh.url.trim(), {
               method: "POST",
               headers: { "Content-Type": "application/json; charset=utf-8" },
               body: JSON.stringify({ text: textPayload })

@@ -33,6 +33,8 @@ Resources:
         - AttributeName: id
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
 
   # DynamoDB Table for Audit Logs
   SgAuditLogsTable:
@@ -50,6 +52,8 @@ Resources:
         - AttributeName: timestamp
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
 
   # HttpApi (API Gateway v2) with CORS Enabled
   SgHttpApi:
@@ -101,7 +105,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sts:AssumeRole
-              Resource: "arn:aws:iam::*:role/*"
+              Resource: "arn:aws:iam::*:role/JungleToolsCrossAccountRole"
 
   # 2. Create Security Group Lambda Function
   CreateSecurityGroupFunction:
@@ -128,7 +132,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sts:AssumeRole
-              Resource: "arn:aws:iam::*:role/*"
+              Resource: "arn:aws:iam::*:role/JungleToolsCrossAccountRole"
 
   # 3. Update Security Group Rules Lambda Function
   UpdateSecurityGroupRulesFunction:
@@ -158,7 +162,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sts:AssumeRole
-              Resource: "arn:aws:iam::*:role/*"
+              Resource: "arn:aws:iam::*:role/JungleToolsCrossAccountRole"
 
   # 4. Delete Security Group Lambda Function
   DeleteSecurityGroupFunction:
@@ -184,7 +188,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sts:AssumeRole
-              Resource: "arn:aws:iam::*:role/*"
+              Resource: "arn:aws:iam::*:role/JungleToolsCrossAccountRole"
 
   # 5. Get Audit Logs Lambda Function
   GetAuditLogsFunction:
@@ -226,7 +230,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sts:AssumeRole
-              Resource: "arn:aws:iam::*:role/*"
+              Resource: "arn:aws:iam::*:role/JungleToolsCrossAccountRole"
 
   # 5b. Get EFS Backups Lambda Function
   GetEfsBackupsFunction:
@@ -251,7 +255,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sts:AssumeRole
-              Resource: "arn:aws:iam::*:role/*"
+              Resource: "arn:aws:iam::*:role/JungleToolsCrossAccountRole"
 
   # 5c. Get RDS Backups Lambda Function
   GetRdsBackupsFunction:
@@ -278,7 +282,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sts:AssumeRole
-              Resource: "arn:aws:iam::*:role/*"
+              Resource: "arn:aws:iam::*:role/JungleToolsCrossAccountRole"
 
   # 5d. Get Slack Config Lambda Function
   GetSlackConfigFunction:
@@ -333,32 +337,24 @@ Resources:
             ApiId: !Ref SgHttpApi
             Path: /slack/report
             Method: GET
-            Auth:
-              Authorizer: NONE
         PreviewEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref SgHttpApi
             Path: /slack/preview
             Method: GET
-            Auth:
-              Authorizer: NONE
         WebhookTestEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref SgHttpApi
             Path: /slack/webhook/test
             Method: POST
-            Auth:
-              Authorizer: NONE
         WebhookEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref SgHttpApi
             Path: /slack/webhook
             Method: POST
-            Auth:
-              Authorizer: NONE
         ScheduleEvent:
           Type: Schedule
           Properties:
@@ -379,13 +375,16 @@ Resources:
                 - elasticfilesystem:DescribeBackupPolicy
                 - rds:DescribeDBInstances
                 - rds:DescribeDBSnapshots
-                - ses:SendEmail
-                - ses:SendRawEmail
               Resource: "*"
             - Effect: Allow
               Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: !Sub "arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/*"
+            - Effect: Allow
+              Action:
                 - sts:AssumeRole
-              Resource: "arn:aws:iam::*:role/*"
+              Resource: "arn:aws:iam::*:role/JungleToolsCrossAccountRole"
 
   # 6. S3 Bucket for Static Website Hosting
   SgFrontendBucket:

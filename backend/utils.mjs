@@ -49,6 +49,20 @@ export async function getEc2Client(event) {
   return getAwsClient(EC2Client, event);
 }
 
+export function isValidSlackWebhookUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  const trimmed = url.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:") return false;
+    if (parsed.hostname !== "hooks.slack.com") return false;
+    if (!parsed.pathname.startsWith("/services/") && !parsed.pathname.startsWith("/workflows/")) return false;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 export function buildResponse(statusCode, body) {
   return {
     statusCode: statusCode,
@@ -61,3 +75,4 @@ export function buildResponse(statusCode, body) {
     body: JSON.stringify(body)
   };
 }
+

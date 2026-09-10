@@ -1,6 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
-import { buildResponse } from "../utils.mjs";
+import { buildResponse, isValidSlackWebhookUrl } from "../utils.mjs";
 
 const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient);
@@ -14,6 +14,28 @@ export const handler = async (event) => {
       body = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
     }
 
+    // Security Validation: Validate webhook URLs to prevent SSRF and injection
+    if (body.webhookUrl && typeof body.webhookUrl === "string" && body.webhookUrl.trim().length > 0) {
+      if (!isValidSlackWebhookUrl(body.webhookUrl)) {
+        return buildResponse(400, {
+          message: "유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...' 형식이어야 합니다."
+        });
+      }
+    }
+
+    if (Array.isArray(body.webhooks)) {
+      for (let i = 0; i < body.webhooks.length; i++) {
+        const wh = body.webhooks[i];
+        if (wh && wh.url && typeof wh.url === "string" && wh.url.trim().length > 0) {
+          if (!isValidSlackWebhookUrl(wh.url)) {
+            return buildResponse(400, {
+              message: `웹훅 #${i + 1} (${wh.name || "이름 없음"}): 유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...' 형식이어야 합니다.`
+            });
+          }
+        }
+      }
+    }
+
     const existing = await docClient.send(
       new GetCommand({
         TableName: SLACK_CONFIG_TABLE,
@@ -21,6 +43,7 @@ export const handler = async (event) => {
       })
     );
     const existingItem = existing.Item || {};
+
 
     const updatedConfig = {
       ...existingItem,
