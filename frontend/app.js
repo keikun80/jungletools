@@ -15,6 +15,7 @@ const saveApiBtn = document.getElementById('btn-save-endpoint');
 const apiStatusBadge = document.getElementById('api-status');
 const apiStatusText = document.getElementById('api-status-text');
 
+const navHome = document.getElementById('nav-home');
 const navSgDashboard = document.getElementById('nav-sg-dashboard') || document.getElementById('nav-dashboard');
 const navSgLogs = document.getElementById('nav-sg-logs') || document.getElementById('nav-logs');
 const navBackupDashboard = document.getElementById('nav-backup-dashboard') || document.getElementById('nav-backups');
@@ -23,6 +24,7 @@ const navNotiSlackEmail = document.getElementById('nav-noti-slack-email') || doc
 const navNotiEmailSmtp = document.getElementById('nav-noti-email-smtp');
 const navNotiEmailRecipients = document.getElementById('nav-noti-email-recipients');
 
+const viewHome = document.getElementById('view-home');
 const viewSgDashboard = document.getElementById('view-sg-dashboard') || document.getElementById('view-dashboard');
 const viewSgDetail = document.getElementById('view-sg-detail');
 const viewSgLogs = document.getElementById('view-sg-logs') || document.getElementById('view-logs');
@@ -155,7 +157,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   setupEventListeners();
-  switchView('sg-dashboard');
+  switchView('home');
 });
 
 // Event Listeners Setup
@@ -169,7 +171,7 @@ function setupEventListeners() {
     }
     apiEndpoint = url;
     localStorage.setItem('sg_api_endpoint', apiEndpoint);
-    if (credentials) testAndFetchData();
+    if (credentials) fetchHomeOverviewData();
   });
 
   // Login Trigger
@@ -194,6 +196,53 @@ function setupEventListeners() {
   }
   if (btnReloginModal) {
     btnReloginModal.addEventListener('click', () => showLoginOverlay());
+  }
+
+  // Home Navigation & Quick Access Buttons
+  if (navHome) {
+    navHome.addEventListener('click', () => {
+      switchView('home');
+      fetchHomeOverviewData();
+    });
+  }
+  const btnRefreshHome = document.getElementById('btn-refresh-home');
+  if (btnRefreshHome) {
+    btnRefreshHome.addEventListener('click', () => fetchHomeOverviewData());
+  }
+  const btnHomeGotoSg = document.getElementById('btn-home-goto-sg');
+  if (btnHomeGotoSg) {
+    btnHomeGotoSg.addEventListener('click', () => {
+      switchView('sg-dashboard');
+      if (!vpcData || vpcData.length === 0) testAndFetchData();
+    });
+  }
+  const btnHomeGotoBackup = document.getElementById('btn-home-goto-backup');
+  if (btnHomeGotoBackup) {
+    btnHomeGotoBackup.addEventListener('click', () => {
+      switchView('backup-dashboard');
+      fetchAllBackupsData();
+    });
+  }
+  const btnHomeGotoSlack = document.getElementById('btn-home-goto-slack');
+  if (btnHomeGotoSlack) {
+    btnHomeGotoSlack.addEventListener('click', () => {
+      switchView('noti-slack-webhook');
+      fetchSlackConfig();
+    });
+  }
+  const btnHomeGotoEmail = document.getElementById('btn-home-goto-email');
+  if (btnHomeGotoEmail) {
+    btnHomeGotoEmail.addEventListener('click', () => {
+      switchView('noti-email-recipients');
+      loadRecipients();
+    });
+  }
+  const btnHomeGotoLogs = document.getElementById('btn-home-goto-logs');
+  if (btnHomeGotoLogs) {
+    btnHomeGotoLogs.addEventListener('click', () => {
+      switchView('sg-logs');
+      fetchAuditLogs();
+    });
   }
 
   // Navigation Tabs
@@ -605,21 +654,22 @@ function handleLogout() {
   selectedSg = null;
   renderSidebarVpcList();
   updateDashboardMetrics();
+  updateBackupMetricsUI('-', '-', '-', '-');
   setApiStatus('offline');
-  switchView('dashboard');
+  switchView('home');
   showToast('Logged out and cleared credentials.', 'info');
 }
 
 // Switching View Management
 function switchView(viewName) {
   const allNavs = [
-    navSgDashboard, navSgLogs, navBackupDashboard,
+    navHome, navSgDashboard, navSgLogs, navBackupDashboard,
     navNotiSlackWebhook, navNotiSlackEmail, navNotiEmailSmtp, navNotiEmailRecipients
   ];
   allNavs.forEach(nav => { if (nav) nav.classList.remove('active'); });
 
   const allViews = [
-    viewSgDashboard, viewSgDetail, viewSgLogs, viewBackupDashboard,
+    viewHome, viewSgDashboard, viewSgDetail, viewSgLogs, viewBackupDashboard,
     viewNotiSlackWebhook, viewNotiSlackEmail, viewNotiEmailSmtp, viewNotiEmailRecipients
   ];
   allViews.forEach(view => { if (view) view.classList.remove('active'); });
@@ -627,7 +677,12 @@ function switchView(viewName) {
   const parentBreadcrumb = document.getElementById('breadcrumb-parent');
   const activeBreadcrumb = document.getElementById('breadcrumb-active');
 
-  if (viewName === 'sg-dashboard' || viewName === 'dashboard') {
+  if (viewName === 'home') {
+    if (navHome) navHome.classList.add('active');
+    if (viewHome) viewHome.classList.add('active');
+    parentBreadcrumb.textContent = 'Jungle Tools';
+    activeBreadcrumb.textContent = 'Home';
+  } else if (viewName === 'sg-dashboard' || viewName === 'dashboard') {
     if (navSgDashboard) navSgDashboard.classList.add('active');
     if (viewSgDashboard) viewSgDashboard.classList.add('active');
     parentBreadcrumb.textContent = 'SG Manage';
@@ -739,6 +794,7 @@ async function testAndFetchData() {
     setApiStatus('online');
     renderSidebarVpcList();
     updateDashboardMetrics();
+    fetchBackupSummaryOnly();
     showToast('Successfully synchronized with AWS VPC API.', 'success');
   } catch (error) {
     console.error(error);
@@ -919,10 +975,9 @@ function renderSidebarVpcList(searchTerm = '') {
   return renderDashboardVpcTabsAndSgs(searchTerm);
 }
 
-// Update dashboard global KPI metrics
+// Update dashboard global KPI metrics (SG Manage & Home)
 function updateDashboardMetrics() {
-  metricVpcs.textContent = vpcData.length;
-  
+  const vpcCount = vpcData.length;
   let sgCount = 0;
   let ruleCount = 0;
 
@@ -933,8 +988,16 @@ function updateDashboardMetrics() {
     });
   });
 
-  metricSgs.textContent = sgCount;
-  metricInbound.textContent = ruleCount;
+  if (metricVpcs) metricVpcs.textContent = vpcCount;
+  if (metricSgs) metricSgs.textContent = sgCount;
+  if (metricInbound) metricInbound.textContent = ruleCount;
+
+  const homeMetricVpcs = document.getElementById('home-metric-vpcs');
+  const homeMetricSgs = document.getElementById('home-metric-sgs');
+  const homeMetricInbound = document.getElementById('home-metric-inbound');
+  if (homeMetricVpcs) homeMetricVpcs.textContent = vpcCount;
+  if (homeMetricSgs) homeMetricSgs.textContent = sgCount;
+  if (homeMetricInbound) homeMetricInbound.textContent = ruleCount;
 }
 
 // Populate VPC options for creation dropdown
@@ -1580,12 +1643,80 @@ async function fetchAllBackupsData() {
     if (tableBodyRds) tableBodyRds.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--danger); padding: 24px;">Error: ${err.message}</td></tr>`;
   }
 
-  if (metricTotal) metricTotal.textContent = totalResources;
-  if (metricHealthy) metricHealthy.textContent = totalHealthy;
-  if (metricFailure) metricFailure.textContent = totalFailure;
-  if (metricUnprotected) metricUnprotected.textContent = totalUnprotected;
+  updateBackupMetricsUI(totalResources, totalHealthy, totalFailure, totalUnprotected);
 
   if (window.lucide) lucide.createIcons();
+}
+
+// Update Backup Metrics across Dashboard and Home
+function updateBackupMetricsUI(total, healthy, failure, unprotected) {
+  const metricPairs = [
+    { ids: ['backup-metric-total', 'home-metric-backup-total'], val: total },
+    { ids: ['backup-metric-healthy', 'home-metric-backup-healthy'], val: healthy },
+    { ids: ['backup-metric-failure', 'home-metric-backup-failure'], val: failure },
+    { ids: ['backup-metric-unprotected', 'home-metric-backup-unprotected'], val: unprotected }
+  ];
+  metricPairs.forEach(item => {
+    item.ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = item.val;
+    });
+  });
+}
+
+// Background lightweight fetcher for Backup Summary Cards
+async function fetchBackupSummaryOnly() {
+  if (!apiEndpoint || !credentials) return;
+  try {
+    const [ebsRes, efsRes, rdsRes] = await Promise.allSettled([
+      signedFetch(`${apiEndpoint}/backups/ebs`),
+      signedFetch(`${apiEndpoint}/backups/efs`),
+      signedFetch(`${apiEndpoint}/backups/rds`)
+    ]);
+    let total = 0, healthy = 0, failure = 0, unprotected = 0;
+    if (ebsRes.status === 'fulfilled' && ebsRes.value.ok) {
+      const data = await ebsRes.value.json();
+      if (data.summary) {
+        total += data.summary.totalVolumes || 0;
+        healthy += data.summary.healthy || 0;
+        failure += data.summary.failure || 0;
+        unprotected += data.summary.unprotected || 0;
+      }
+    }
+    if (efsRes.status === 'fulfilled' && efsRes.value.ok) {
+      const data = await efsRes.value.json();
+      if (data.summary) {
+        total += data.summary.totalFileSystems || 0;
+        healthy += data.summary.healthy || 0;
+        failure += data.summary.failure || 0;
+        unprotected += data.summary.unprotected || 0;
+      }
+    }
+    if (rdsRes.status === 'fulfilled' && rdsRes.value.ok) {
+      const data = await rdsRes.value.json();
+      if (data.summary) {
+        total += data.summary.totalInstances || 0;
+        healthy += data.summary.healthy || 0;
+        failure += data.summary.failure || 0;
+        unprotected += data.summary.unprotected || 0;
+      }
+    }
+    updateBackupMetricsUI(total, healthy, failure, unprotected);
+  } catch (err) {
+    console.warn("Could not fetch background backup summary:", err);
+  }
+}
+
+// Fetch Comprehensive Home Overview (SG + Backups)
+async function fetchHomeOverviewData() {
+  if (!validateEndpoint() || !credentials) {
+    showLoginOverlay();
+    return;
+  }
+  await Promise.allSettled([
+    testAndFetchData(),
+    fetchBackupSummaryOnly()
+  ]);
 }
 
 // Render EBS Backups Table

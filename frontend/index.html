@@ -31,6 +31,16 @@
       </div>
       
       <nav class="sidebar-nav">
+        <!-- 0. Home Group -->
+        <div class="nav-group" style="margin-bottom: 6px;">
+          <button id="nav-home" class="nav-item active">
+            <i data-lucide="home"></i>
+            <span>Home</span>
+          </button>
+        </div>
+
+        <div class="sidebar-divider" style="margin: 8px 0;"></div>
+
         <!-- 1. SG Manage Group -->
         <div class="nav-group">
           <div class="nav-group-header">
@@ -38,7 +48,7 @@
             <span>SG Manage</span>
           </div>
           <div class="nav-group-items">
-            <button id="nav-sg-dashboard" class="nav-item sub-item active">
+            <button id="nav-sg-dashboard" class="nav-item sub-item">
               <i data-lucide="layout-dashboard"></i>
               <span>Dashboard</span>
             </button>
@@ -114,9 +124,9 @@
       <!-- Top Header Bar -->
       <header class="top-bar">
         <div class="breadcrumb">
-          <span id="breadcrumb-parent">SG Manage</span>
+          <span id="breadcrumb-parent">Jungle Tools</span>
           <span class="separator">/</span>
-          <span id="breadcrumb-active" class="active">Dashboard</span>
+          <span id="breadcrumb-active" class="active">Home</span>
         </div>
 
         <div class="api-config">
@@ -154,8 +164,170 @@
         </div>
       </header>
 
+      <!-- View 0: Home - Unified Dashboard -->
+      <section id="view-home" class="content-view active">
+        <div class="view-header" style="margin-bottom: 24px;">
+          <div>
+            <h2>AWS Infrastructure & Security Dashboard</h2>
+            <p>Unified real-time metrics for Security Groups, Firewall Rules, and Multi-Service Backups (EBS, EFS, RDS).</p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button id="btn-refresh-home" class="btn btn-secondary">
+              <i data-lucide="rotate-cw"></i>
+              <span>Refresh Metrics</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Home Grid: SG Manage Section -->
+        <div class="card" style="margin-bottom: 24px; padding: 22px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="background: rgba(99, 102, 241, 0.15); color: var(--accent-indigo); padding: 8px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                <i data-lucide="shield" style="width: 20px; height: 20px;"></i>
+              </div>
+              <div>
+                <h3 style="font-size: 1.05rem; font-weight: 600; margin: 0; color: var(--text-primary);">SG Manage (보안 그룹 및 방화벽)</h3>
+                <span style="font-size: 0.8rem; color: var(--text-muted);">VPC별 보안 그룹 현황 및 인바운드/아웃바운드 규칙 지표</span>
+              </div>
+            </div>
+            <button id="btn-home-goto-sg" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px;">
+              <span>보안 그룹 관리 바로가기</span>
+              <i data-lucide="arrow-right" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+
+          <div class="metrics-grid" style="margin-bottom: 0;">
+            <div class="metric-card">
+              <div class="metric-icon bg-indigo">
+                <i data-lucide="network"></i>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Active VPCs</span>
+                <span class="metric-value" id="home-metric-vpcs">-</span>
+              </div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon bg-cyan">
+                <i data-lucide="shield"></i>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Total Security Groups</span>
+                <span class="metric-value" id="home-metric-sgs">-</span>
+              </div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon bg-purple">
+                <i data-lucide="list-todo"></i>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Inbound Rules</span>
+                <span class="metric-value" id="home-metric-inbound">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Home Grid: Backup Monitor Section -->
+        <div class="card" style="margin-bottom: 24px; padding: 22px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green); padding: 8px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                <i data-lucide="hard-drive" style="width: 20px; height: 20px;"></i>
+              </div>
+              <div>
+                <h3 style="font-size: 1.05rem; font-weight: 600; margin: 0; color: var(--text-primary);">Backup Monitor (백업 상태 관제)</h3>
+                <span style="font-size: 0.8rem; color: var(--text-muted);">EBS 스냅샷, EFS 백업, RDS 데이터베이스 스냅샷 종합 현황</span>
+              </div>
+            </div>
+            <button id="btn-home-goto-backup" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px;">
+              <span>백업 현황 상세 바로가기</span>
+              <i data-lucide="arrow-right" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+
+          <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 0;">
+            <div class="metric-card">
+              <div class="metric-icon bg-indigo">
+                <i data-lucide="layers"></i>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Total Resources</span>
+                <span class="metric-value" id="home-metric-backup-total">-</span>
+              </div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon bg-green">
+                <i data-lucide="check-circle-2"></i>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Healthy (&lt;=7d)</span>
+                <span class="metric-value" id="home-metric-backup-healthy" style="color: var(--success);">-</span>
+              </div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon bg-danger">
+                <i data-lucide="x-circle"></i>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Failure (Error / &gt;=8d)</span>
+                <span class="metric-value" id="home-metric-backup-failure" style="color: var(--danger);">-</span>
+              </div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-icon bg-warning">
+                <i data-lucide="shield-off"></i>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Unprotected</span>
+                <span class="metric-value" id="home-metric-backup-unprotected" style="color: #f59e0b;">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Cards Banner -->
+        <div class="home-quick-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+          <div class="card" style="margin-bottom: 0; padding: 20px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <i data-lucide="bell" style="width: 18px; height: 18px; color: var(--accent-orange);"></i>
+              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600;">알림 및 모니터링 연동</h4>
+            </div>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5;">
+              정기적인 백업 보고서 및 상태 변경 알림을 Slack 웹훅 또는 사내 SMTP 이메일 주소록으로 발송할 수 있습니다.
+            </p>
+            <div style="display: flex; gap: 8px;">
+              <button id="btn-home-goto-slack" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">
+                <i data-lucide="message-square" style="width: 13px; height: 13px;"></i>
+                <span>Slack 웹훅 설정</span>
+              </button>
+              <button id="btn-home-goto-email" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">
+                <i data-lucide="mail" style="width: 13px; height: 13px;"></i>
+                <span>이메일 주소록</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom: 0; padding: 20px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <i data-lucide="history" style="width: 18px; height: 18px; color: var(--accent-cyan);"></i>
+              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600;">보안 변경 감사 로그</h4>
+            </div>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5;">
+              보안 그룹 생성, 삭제, 인바운드/아웃바운드 룰 수정 이력이 DynamoDB에 안전하게 기록 및 추적됩니다.
+            </p>
+            <div>
+              <button id="btn-home-goto-logs" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">
+                <i data-lucide="history" style="width: 13px; height: 13px;"></i>
+                <span>감사 로그 확인</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- View 1: SG Manage - Dashboard (VPCs & Security Groups) -->
-      <section id="view-sg-dashboard" class="content-view active">
+      <section id="view-sg-dashboard" class="content-view">
         <div class="view-header" style="margin-bottom: 20px;">
           <div>
             <h2>VPCs & Security Groups Operator</h2>

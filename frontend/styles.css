@@ -155,6 +155,7 @@ select option {
   letter-spacing: -0.02em;
   background: linear-gradient(135deg, var(--text-main), var(--accent-cyan));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -544,7 +545,7 @@ select option {
   height: 100%;
   overflow-y: auto;
   position: relative;
-  background-radial-gradient: circle at 80% 20%, rgba(99, 102, 241, 0.04) 0%, transparent 50%;
+  background: radial-gradient(circle at 80% 20%, rgba(99, 102, 241, 0.04) 0%, transparent 50%);
 }
 
 /* Header Top Bar */
@@ -799,6 +800,7 @@ select option {
   margin-bottom: 12px;
   background: linear-gradient(135deg, var(--text-main), var(--text-muted));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -869,6 +871,19 @@ select option {
 .metric-value {
   font-size: 1.8rem;
   font-weight: 700;
+}
+
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s ease;
+}
+
+.card:hover {
+  border-color: var(--border-color-focus);
 }
 
 .dashboard-placeholder {
