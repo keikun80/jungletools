@@ -56,7 +56,13 @@ export function isValidSlackWebhookUrl(url) {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== "https:") return false;
     if (parsed.hostname !== "hooks.slack.com") return false;
-    if (!parsed.pathname.startsWith("/services/") && !parsed.pathname.startsWith("/workflows/")) return false;
+    if (
+      !parsed.pathname.startsWith("/services/") &&
+      !parsed.pathname.startsWith("/workflows/") &&
+      !parsed.pathname.startsWith("/triggers/")
+    ) {
+      return false;
+    }
     return true;
   } catch (e) {
     return false;

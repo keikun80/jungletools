@@ -656,7 +656,7 @@ export const handler = async (event) => {
       } else if (body.webhookUrl) {
         if (!isValidSlackWebhookUrl(body.webhookUrl)) {
           return buildResponse(400, {
-            message: "유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...' 형식이어야 합니다."
+            message: "유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...', '/triggers/...', 또는 '/workflows/...' 형식이어야 합니다."
           });
         }
         webhooksToSend.push({

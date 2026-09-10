@@ -18,7 +18,7 @@ export const handler = async (event) => {
     if (body.webhookUrl && typeof body.webhookUrl === "string" && body.webhookUrl.trim().length > 0) {
       if (!isValidSlackWebhookUrl(body.webhookUrl)) {
         return buildResponse(400, {
-          message: "유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...' 형식이어야 합니다."
+          message: "유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...', '/triggers/...', 또는 '/workflows/...' 형식이어야 합니다."
         });
       }
     }
@@ -29,7 +29,7 @@ export const handler = async (event) => {
         if (wh && wh.url && typeof wh.url === "string" && wh.url.trim().length > 0) {
           if (!isValidSlackWebhookUrl(wh.url)) {
             return buildResponse(400, {
-              message: `웹훅 #${i + 1} (${wh.name || "이름 없음"}): 유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...' 형식이어야 합니다.`
+              message: `웹훅 #${i + 1} (${wh.name || "이름 없음"}): 유효하지 않은 슬랙 웹훅 URL입니다. 'https://hooks.slack.com/services/...', '/triggers/...', 또는 '/workflows/...' 형식이어야 합니다.`
             });
           }
         }
